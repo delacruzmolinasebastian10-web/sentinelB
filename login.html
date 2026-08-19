@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SentinelB — Iniciar sesión</title>
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=Nunito:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<div id="loginScreen">
+  <div class="login-card">
+    <div class="login-logo">
+      <img src="assets/logo.png" class="login-logo-img" alt="SentinelB">
+    </div>
+    <div class="login-sub">Sistema de Diagnóstico Predictivo Bovino</div>
+    <div class="login-field">
+      <label>Usuario</label>
+      <input type="text" id="loginUser" placeholder="admin" autocomplete="username">
+    </div>
+    <div class="login-field">
+      <label>Contraseña</label>
+      <input type="password" id="loginPass" placeholder="••••••••" autocomplete="current-password">
+    </div>
+    <button class="login-btn" onclick="doLogin()">Iniciar sesión</button>
+    <div class="login-error" id="loginError"></div>
+  </div>
+</div>
+
+<script>
+const BASE = "http://localhost:4000";
+
+document.getElementById('loginUser').addEventListener('keydown', e => { if(e.key==='Enter') doLogin(); });
+document.getElementById('loginPass').addEventListener('keydown', e => { if(e.key==='Enter') doLogin(); });
+
+async function doLogin(){
+  const u = document.getElementById('loginUser').value.trim();
+  const p = document.getElementById('loginPass').value.trim();
+  const errEl = document.getElementById('loginError');
+  errEl.textContent = '';
+
+  if(!u || !p){
+    errEl.textContent = '❌ Ingresa usuario y contraseña';
+    return;
+  }
+
+  const btn = document.querySelector('.login-btn');
+  btn.textContent = 'Entrando...';
+  btn.disabled = true;
+
+  try {
+    const r = await fetch(`${BASE}/api/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ usuario: u, password: p })
+    });
+    const d = await r.json();
+
+    if(d.ok){
+      // Guardar sesión y redirigir al app
+      sessionStorage.setItem('sb_user', d.usuario);
+      window.location.href = 'index.html';
+    } else {
+      errEl.textContent = '❌ Usuario o contraseña incorrectos';
+      btn.textContent = 'Iniciar sesión';
+      btn.disabled = false;
+    }
+  } catch(e) {
+    errEl.textContent = '❌ No se puede conectar al servidor. ¿Está corriendo sentinelb-server.js?';
+    btn.textContent = 'Iniciar sesión';
+    btn.disabled = false;
+  }
+}
+</script>
+</body>
+</html>

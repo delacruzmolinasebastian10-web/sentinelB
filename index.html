@@ -1,0 +1,939 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <!-- ============================= -->
+  <!-- CONFIGURACIÓN PWA -->
+  <!-- ============================= -->
+
+  <meta name="theme-color" content="#0d6efd">
+
+  <meta name="description" content="SentinelB — Monitor Bovino">
+
+  <meta name="mobile-web-app-capable" content="yes">
+
+  <meta name="apple-mobile-web-app-capable" content="yes">
+
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+
+  <!-- Manifest de la PWA -->
+  <link rel="manifest" href="./manifest.json">
+
+  <!-- Icono -->
+  <link rel="icon" type="image/png" href="assets/logo.png">
+
+  <!-- ============================= -->
+  <!-- INFORMACIÓN DE LA APLICACIÓN -->
+  <!-- ============================= -->
+
+  <title>SentinelB — Monitor Bovino</title>
+
+  <!-- ============================= -->
+  <!-- FUENTES -->
+  <!-- ============================= -->
+
+  <link
+    href="https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=Nunito:wght@300;400;500;600;700&display=swap"
+    rel="stylesheet"
+  >
+
+  <!-- ============================= -->
+  <!-- CHART.JS -->
+  <!-- ============================= -->
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
+  <!-- ============================= -->
+  <!-- ESTILOS -->
+  <!-- ============================= -->
+
+  <link rel="stylesheet" href="styles.css">
+
+</head>
+
+<body>
+
+<!-- ===================================================== -->
+<!-- APP -->
+<!-- ===================================================== -->
+
+<div id="app">
+
+  <!-- =================================================== -->
+  <!-- SIDEBAR -->
+  <!-- =================================================== -->
+
+  <aside class="sidebar">
+
+    <div class="sb-logo">
+      <img
+        src="assets/logo.png"
+        class="sb-logo-img"
+        alt="SentinelB"
+      >
+    </div>
+
+    <nav class="sb-nav">
+
+      <div class="sb-section">
+        Monitoreo
+      </div>
+
+      <div
+        class="sb-item active"
+        data-sec="dashboard"
+        onclick="goTo('dashboard',this)"
+      >
+        <span class="sb-item-icon">📊</span>
+        <span>Dashboard</span>
+      </div>
+
+      <div
+        class="sb-item"
+        data-sec="alertas"
+        onclick="goTo('alertas',this)"
+      >
+        <span class="sb-item-icon">🔔</span>
+        <span>Alertas</span>
+
+        <span
+          class="sb-badge"
+          id="sbBadge"
+          style="display:none"
+        >
+          0
+        </span>
+      </div>
+
+      <div class="sb-section">
+        Gestión
+      </div>
+
+      <div
+        class="sb-item"
+        data-sec="animales"
+        onclick="goTo('animales',this)"
+      >
+        <span class="sb-item-icon">🐄</span>
+        <span>Animales</span>
+      </div>
+
+      <div
+        class="sb-item"
+        data-sec="historial"
+        onclick="goTo('historial',this)"
+      >
+        <span class="sb-item-icon">📈</span>
+        <span>Historial</span>
+      </div>
+
+      <div class="sb-section">
+        Datos
+      </div>
+
+      <div
+        class="sb-item"
+        data-sec="reporte"
+        onclick="goTo('reporte',this)"
+      >
+        <span class="sb-item-icon">📋</span>
+        <span>Reportes</span>
+      </div>
+
+    </nav>
+
+    <div class="sb-footer">
+
+      <div class="sb-user">
+
+        <div
+          class="sb-avatar"
+          id="sbAvatar"
+        >
+          A
+        </div>
+
+        <span
+          class="sb-username"
+          id="sbUser"
+        >
+          admin
+        </span>
+
+      </div>
+
+      <button
+        class="sb-logout"
+        onclick="doLogout()"
+      >
+        🚪 Cerrar sesión
+      </button>
+
+    </div>
+
+  </aside>
+
+
+  <!-- =================================================== -->
+  <!-- MAIN -->
+  <!-- =================================================== -->
+
+  <div class="main">
+
+    <!-- TOPBAR -->
+
+    <div class="topbar">
+
+      <div
+        class="topbar-title"
+        id="topTitle"
+      >
+        Dashboard
+      </div>
+
+      <div class="topbar-right">
+
+        <div class="live-pill">
+          <span class="live-dot"></span>
+          En vivo
+        </div>
+
+        <div
+          class="topbar-time"
+          id="topTime"
+        ></div>
+
+      </div>
+
+    </div>
+
+
+    <!-- ================================================= -->
+    <!-- CONTENT -->
+    <!-- ================================================= -->
+
+    <div class="content">
+
+
+      <!-- =============================================== -->
+      <!-- DASHBOARD -->
+      <!-- =============================================== -->
+
+      <div
+        id="sec-dashboard"
+        class="section active"
+      >
+
+        <div class="stats-row">
+
+          <div class="stat-card green">
+
+            <div class="stat-icon g">
+              🐄
+            </div>
+
+            <div>
+              <div
+                class="stat-num"
+                id="d-animales"
+              >
+                0
+              </div>
+
+              <div class="stat-lbl">
+                Animales activos
+              </div>
+            </div>
+
+          </div>
+
+
+          <div class="stat-card blue">
+
+            <div class="stat-icon b">
+              📡
+            </div>
+
+            <div>
+
+              <div
+                class="stat-num"
+                id="d-lecturas"
+              >
+                0
+              </div>
+
+              <div class="stat-lbl">
+                Lecturas hoy
+              </div>
+
+            </div>
+
+          </div>
+
+
+          <div class="stat-card amber">
+
+            <div class="stat-icon a">
+              ⚠️
+            </div>
+
+            <div>
+
+              <div
+                class="stat-num"
+                id="d-alertas"
+              >
+                0
+              </div>
+
+              <div class="stat-lbl">
+                Alertas pendientes
+              </div>
+
+            </div>
+
+          </div>
+
+
+          <div class="stat-card red">
+
+            <div class="stat-icon r">
+              🔴
+            </div>
+
+            <div>
+
+              <div
+                class="stat-num"
+                id="d-rojas"
+              >
+                0
+              </div>
+
+              <div class="stat-lbl">
+                Alertas rojas
+              </div>
+
+            </div>
+
+          </div>
+
+        </div>
+
+
+        <!-- GRÁFICAS -->
+
+        <div class="grid-2">
+
+          <div class="card">
+
+            <div class="card-title">
+
+              <span class="ct-icon">
+                📊
+              </span>
+
+              Consumo de sal promedio hoy
+              (por animal)
+
+            </div>
+
+            <div class="chart-wrap">
+
+              <canvas
+                id="chartConsumo"
+              ></canvas>
+
+            </div>
+
+          </div>
+
+
+          <div class="card">
+
+            <div class="card-title">
+
+              <span class="ct-icon">
+                🌡️
+              </span>
+
+              Temperatura corporal promedio hoy
+
+            </div>
+
+            <div class="chart-wrap">
+
+              <canvas
+                id="chartTemp"
+              ></canvas>
+
+            </div>
+
+          </div>
+
+        </div>
+
+
+        <!-- ÚLTIMAS LECTURAS -->
+
+        <div class="card">
+
+          <div class="card-title">
+
+            <span class="ct-icon">
+              📡
+            </span>
+
+            Últimas lecturas del ESP32
+
+          </div>
+
+          <div class="tbl-wrap">
+
+            <table>
+
+              <thead>
+
+                <tr>
+
+                  <th>RFID</th>
+                  <th>Nombre</th>
+                  <th>Sal (g)</th>
+                  <th>TC (°C)</th>
+                  <th>TA (°C)</th>
+                  <th>Estado</th>
+                  <th>Hora</th>
+
+                </tr>
+
+              </thead>
+
+              <tbody
+                id="tblUltimas"
+              ></tbody>
+
+            </table>
+
+          </div>
+
+        </div>
+
+      </div>
+
+
+      <!-- =============================================== -->
+      <!-- ALERTAS -->
+      <!-- =============================================== -->
+
+      <div
+        id="sec-alertas"
+        class="section"
+      >
+
+        <div
+          style="
+            display:flex;
+            align-items:center;
+            justify-content:space-between;
+            margin-bottom:20px;
+          "
+        >
+
+          <div
+            style="
+              font-family:'Syne',sans-serif;
+              font-weight:800;
+              font-size:1rem;
+            "
+          >
+            Alertas del sistema
+          </div>
+
+          <button
+            class="btn btn-secondary"
+            onclick="leerTodas()"
+            style="
+              font-size:.8rem;
+              padding:8px 16px;
+            "
+          >
+            ✓ Marcar todas como leídas
+          </button>
+
+        </div>
+
+        <div
+          id="listaAlertas"
+        ></div>
+
+      </div>
+
+
+      <!-- =============================================== -->
+      <!-- ANIMALES -->
+      <!-- =============================================== -->
+
+      <div
+        id="sec-animales"
+        class="section"
+      >
+
+        <div class="animales-header">
+
+          <div>
+
+            <div
+              style="
+                font-family:'Syne',sans-serif;
+                font-weight:800;
+                font-size:1rem;
+              "
+            >
+              Animales registrados
+            </div>
+
+            <div
+              style="
+                font-family:'Nunito',sans-serif;
+                font-size:.78rem;
+                color:var(--ink-3);
+                font-weight:600;
+                margin-top:3px;
+              "
+            >
+              Click en un animal para editar
+            </div>
+
+          </div>
+
+
+          <button
+            class="btn btn-primary btn-agregar"
+            onclick="abrirNuevoAnimal()"
+          >
+
+            <span
+              style="
+                font-size:1.1rem;
+                line-height:1;
+              "
+            >
+              +
+            </span>
+
+            Agregar animal
+
+          </button>
+
+        </div>
+
+        <div
+          class="animales-grid"
+          id="gridAnimales"
+        ></div>
+
+      </div>
+
+
+      <!-- =============================================== -->
+      <!-- HISTORIAL -->
+      <!-- =============================================== -->
+
+      <div
+        id="sec-historial"
+        class="section"
+      >
+
+        <div
+          style="
+            display:flex;
+            gap:14px;
+            align-items:flex-end;
+            flex-wrap:wrap;
+            margin-bottom:20px;
+          "
+        >
+
+          <div class="rf-field">
+
+            <label>
+              Animal (RFID)
+            </label>
+
+            <select
+              id="selectRfid"
+              onchange="cargarHistorial()"
+            >
+
+              <option value="">
+                Seleccionar animal...
+              </option>
+
+            </select>
+
+          </div>
+
+
+          <div class="rf-field">
+
+            <label>
+              Período
+            </label>
+
+            <select
+              id="selectDias"
+              onchange="cargarHistorial()"
+            >
+
+              <option value="1">
+                Últimas 24h
+              </option>
+
+              <option value="3">
+                Últimos 3 días
+              </option>
+
+              <option
+                value="7"
+                selected
+              >
+                Últimos 7 días
+              </option>
+
+              <option value="30">
+                Último mes
+              </option>
+
+            </select>
+
+          </div>
+
+        </div>
+
+
+        <div id="historialContent">
+
+          <div class="empty">
+
+            <div class="empty-icon">
+              📈
+            </div>
+
+            <div class="empty-msg">
+              Selecciona un animal para ver su historial
+            </div>
+
+          </div>
+
+        </div>
+
+      </div>
+
+
+      <!-- =============================================== -->
+      <!-- REPORTES -->
+      <!-- =============================================== -->
+
+      <div
+        id="sec-reporte"
+        class="section"
+      >
+
+        <div
+          class="card"
+          style="margin-bottom:20px;"
+        >
+
+          <div class="card-title">
+
+            <span class="ct-icon">
+              📋
+            </span>
+
+            Exportar reporte CSV
+
+          </div>
+
+
+          <div class="report-form">
+
+            <div class="rf-field">
+
+              <label>
+                Desde
+              </label>
+
+              <input
+                type="date"
+                id="rDesde"
+              >
+
+            </div>
+
+
+            <div class="rf-field">
+
+              <label>
+                Hasta
+              </label>
+
+              <input
+                type="date"
+                id="rHasta"
+              >
+
+            </div>
+
+
+            <div class="rf-field">
+
+              <label>
+                Animal (RFID)
+              </label>
+
+              <select id="rRfid">
+
+                <option value="">
+                  Todos los animales
+                </option>
+
+              </select>
+
+            </div>
+
+
+            <div class="rf-field">
+
+              <label>
+                &nbsp;
+              </label>
+
+              <button
+                class="btn btn-primary"
+                onclick="exportarCSV()"
+              >
+                ⬇️ Descargar CSV
+              </button>
+
+            </div>
+
+          </div>
+
+        </div>
+
+
+        <div class="card">
+
+          <div class="card-title">
+
+            <span class="ct-icon">
+              📊
+            </span>
+
+            Resumen estadístico
+
+          </div>
+
+
+          <div id="resumenEstadistico">
+
+            <div class="empty">
+
+              <div class="empty-icon">
+                📊
+              </div>
+
+              <div class="empty-msg">
+                Cargando estadísticas...
+              </div>
+
+            </div>
+
+          </div>
+
+        </div>
+
+      </div>
+
+    </div>
+
+  </div>
+
+</div>
+
+
+<!-- ===================================================== -->
+<!-- MODAL EDITAR / AGREGAR ANIMAL -->
+<!-- ===================================================== -->
+
+<div
+  class="modal-overlay"
+  id="modalAnimal"
+>
+
+  <div class="modal">
+
+    <h3 id="modalAnimalTitle">
+      ✏️ Editar Animal
+    </h3>
+
+
+    <div class="modal-field">
+
+      <label>
+        RFID
+        <span class="required">*</span>
+      </label>
+
+      <input
+        type="text"
+        id="mRfid"
+        placeholder="Ej: A042, TAG-001..."
+      >
+
+      <div
+        class="field-hint"
+        id="mRfidHint"
+      ></div>
+
+    </div>
+
+
+    <div class="modal-field">
+
+      <label>
+        Nombre del animal
+      </label>
+
+      <input
+        type="text"
+        id="mNombre"
+        placeholder="Ej: Lupita, Vaca-03..."
+      >
+
+    </div>
+
+
+    <div class="modal-field">
+
+      <label>
+        Raza
+      </label>
+
+      <input
+        type="text"
+        id="mRaza"
+        placeholder="Ej: Holstein, Angus, Brahman..."
+      >
+
+    </div>
+
+
+    <div class="modal-field">
+
+      <label>
+        Fecha de nacimiento
+      </label>
+
+      <input
+        type="date"
+        id="mFecha"
+      >
+
+    </div>
+
+
+    <div class="modal-field">
+
+      <label>
+        Notas / Descripción
+      </label>
+
+      <textarea
+        id="mDesc"
+        rows="3"
+        placeholder="Observaciones, historial médico..."
+      ></textarea>
+
+    </div>
+
+
+    <div class="modal-btns">
+
+      <button
+        class="btn btn-primary"
+        id="modalGuardarBtn"
+        onclick="guardarAnimal()"
+      >
+        💾 Guardar
+      </button>
+
+      <button
+        class="btn btn-secondary"
+        onclick="cerrarModal()"
+      >
+        Cancelar
+      </button>
+
+    </div>
+
+  </div>
+
+</div>
+
+
+<!-- ===================================================== -->
+<!-- JAVASCRIPT PRINCIPAL -->
+<!-- ===================================================== -->
+
+<script src="app.js"></script>
+
+
+<!-- ===================================================== -->
+<!-- SERVICE WORKER / PWA -->
+<!-- ===================================================== -->
+
+<script>
+
+  if ("serviceWorker" in navigator) {
+
+    window.addEventListener("load", () => {
+
+      navigator.serviceWorker
+        .register("./service-worker.js")
+
+        .then((registration) => {
+
+          console.log(
+            "✅ SentinelB PWA: Service Worker registrado"
+          );
+
+          console.log(
+            "📂 Scope:",
+            registration.scope
+          );
+
+        })
+
+        .catch((error) => {
+
+          console.error(
+            "❌ SentinelB PWA: Error registrando Service Worker:",
+            error
+          );
+
+        });
+
+    });
+
+  }
+
+</script>
+
+
+</body>
+</html>
