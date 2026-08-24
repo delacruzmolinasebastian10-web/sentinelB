@@ -1,8 +1,14 @@
 {
+  "name": "sentinelb",
+  "version": "1.0.0",
+  "description": "SentinelB - Monitor Bovino",
+  "main": "Sentinelb-server.js",
+  "scripts": {
+    "start": "node Sentinelb-server.js"
+  },
   "dependencies": {
-    "better-sqlite3": "^12.9.0",
     "cors": "^2.8.6",
     "express": "^5.2.1",
-    "mysql2": "^3.23.3"
+    "pg": "^8.16.3"
   }
 }
