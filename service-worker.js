@@ -1,5 +1,4 @@
 const CACHE_NAME = "sentinelb-v1";
-
 const APP_SHELL = [
   "/",
   "/login.html",
@@ -7,9 +6,10 @@ const APP_SHELL = [
   "/styles.css",
   "/app.js",
   "/assets/logo.png",
-  "/manifest.json"
+  "/manifest.json",
+  "/icon-192.png",
+  "/icon-512.png"
 ];
-
 // Instalar Service Worker
 self.addEventListener("install", event => {
   event.waitUntil(
@@ -18,7 +18,6 @@ self.addEventListener("install", event => {
       .then(() => self.skipWaiting())
   );
 });
-
 // Activar nueva versión
 self.addEventListener("activate", event => {
   event.waitUntil(
@@ -31,15 +30,11 @@ self.addEventListener("activate", event => {
     ).then(() => self.clients.claim())
   );
 });
-
 // Peticiones
 self.addEventListener("fetch", event => {
-
   // Solo manejar peticiones GET
   if (event.request.method !== "GET") return;
-
   const url = new URL(event.request.url);
-
   // Las APIs SIEMPRE deben pedir los datos al servidor.
   // No queremos datos antiguos del dashboard.
   if (url.pathname.startsWith("/api/")) {
@@ -60,29 +55,24 @@ self.addEventListener("fetch", event => {
           );
         })
     );
-
     return;
   }
-
   // Para archivos de la aplicación:
   // primero intenta obtenerlos de internet,
   // y si no hay conexión usa la versión guardada.
   event.respondWith(
     fetch(event.request)
       .then(response => {
-
         if (
           response &&
           response.status === 200 &&
           response.type === "basic"
         ) {
           const responseClone = response.clone();
-
           caches.open(CACHE_NAME).then(cache => {
             cache.put(event.request, responseClone);
           });
         }
-
         return response;
       })
       .catch(() => caches.match(event.request))
