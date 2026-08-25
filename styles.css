@@ -360,3 +360,61 @@ input[readonly]{background:var(--surface2) !important;color:var(--ink-3);cursor:
   .grid-2,.grid-3{grid-template-columns:1fr;}
   .animales-header{flex-direction:column;align-items:flex-start;gap:12px;}
 }
+
+/* ── RESPONSIVE — CELULARES PEQUEÑOS ── */
+@media(max-width:600px){
+
+  html{font-size:14px;}
+
+  /* Login más compacto */
+  .login-card{
+    padding:32px 24px;
+    max-width:340px;
+    border-radius:var(--radius);
+  }
+  .login-logo-img{max-width:200px;}
+
+  /* Sidebar aún más angosto */
+  .sidebar{width:52px;}
+  .sb-item{padding:12px;}
+  .sb-item-icon{font-size:1rem;width:auto;}
+
+  /* Topbar */
+  .topbar{padding:0 16px;height:56px;}
+  .topbar-title{font-size:1rem;}
+  .topbar-time{display:none;}
+  .live-pill{padding:5px 10px;font-size:.7rem;}
+
+  .content{padding:16px;}
+
+  /* Tarjetas de estadísticas en una sola columna */
+  .stats-row{grid-template-columns:1fr;gap:12px;}
+  .stat-card{padding:18px 16px;}
+  .stat-num{font-size:1.6rem;}
+
+  /* Gráficas más bajas para no ocupar toda la pantalla */
+  .chart-wrap{height:180px;}
+
+  .card{padding:16px;}
+
+  /* Tarjetas de animales en una columna */
+  .animales-grid{grid-template-columns:1fr;}
+  .animales-header{flex-direction:column;align-items:stretch;gap:12px;}
+  .btn-agregar{justify-content:center;}
+
+  /* Modal ocupa casi toda la pantalla */
+  .modal{
+    padding:22px;
+    max-width:92vw;
+    max-height:85vh;
+  }
+
+  /* Formulario de reportes en columna */
+  .report-form{flex-direction:column;align-items:stretch;}
+  .rf-field{width:100%;}
+
+  /* Tablas: reduce texto para que quepa mejor */
+  table{font-size:.78rem;}
+  thead th{padding:8px 10px;}
+  tbody td{padding:9px 10px;}
+}
