@@ -180,6 +180,13 @@
   </aside>
 
 
+  <div
+    class="sidebar-overlay"
+    id="sidebarOverlay"
+    onclick="closeSidebar()"
+    aria-hidden="true"
+  ></div>
+
   <!-- =================================================== -->
   <!-- MAIN -->
   <!-- =================================================== -->
@@ -189,6 +196,19 @@
     <!-- TOPBAR -->
 
     <div class="topbar">
+
+      <button
+        class="menu-toggle"
+        id="menuToggle"
+        type="button"
+        aria-label="Abrir menú"
+        aria-expanded="false"
+        onclick="toggleSidebar()"
+      >
+        <span></span>
+        <span></span>
+        <span></span>
+      </button>
 
       <div
         class="topbar-title"
@@ -899,6 +919,70 @@
 <!-- ===================================================== -->
 <!-- SERVICE WORKER / PWA -->
 <!-- ===================================================== -->
+
+<script>
+  // =====================================================
+  // MENÚ RESPONSIVE
+  // =====================================================
+
+  function openSidebar() {
+    const sidebar = document.querySelector(".sidebar");
+    const overlay = document.getElementById("sidebarOverlay");
+    const toggle = document.getElementById("menuToggle");
+
+    if (!sidebar || !overlay || !toggle) return;
+
+    sidebar.classList.add("open");
+    overlay.classList.add("open");
+    toggle.classList.add("active");
+    toggle.setAttribute("aria-expanded", "true");
+    document.body.classList.add("menu-open");
+  }
+
+  function closeSidebar() {
+    const sidebar = document.querySelector(".sidebar");
+    const overlay = document.getElementById("sidebarOverlay");
+    const toggle = document.getElementById("menuToggle");
+
+    if (!sidebar || !overlay || !toggle) return;
+
+    sidebar.classList.remove("open");
+    overlay.classList.remove("open");
+    toggle.classList.remove("active");
+    toggle.setAttribute("aria-expanded", "false");
+    document.body.classList.remove("menu-open");
+  }
+
+  function toggleSidebar() {
+    const sidebar = document.querySelector(".sidebar");
+
+    if (sidebar && sidebar.classList.contains("open")) {
+      closeSidebar();
+    } else {
+      openSidebar();
+    }
+  }
+
+  document.addEventListener("click", function(event) {
+    const item = event.target.closest(".sb-item");
+
+    if (item && window.innerWidth <= 900) {
+      closeSidebar();
+    }
+  });
+
+  document.addEventListener("keydown", function(event) {
+    if (event.key === "Escape") {
+      closeSidebar();
+    }
+  });
+
+  window.addEventListener("resize", function() {
+    if (window.innerWidth > 900) {
+      closeSidebar();
+    }
+  });
+</script>
 
 <script>
 
