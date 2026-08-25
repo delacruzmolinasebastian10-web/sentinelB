@@ -1,4 +1,4 @@
-const BASE = "http://localhost:4000";
+const BASE = "";
 let currentUser = null;
 let charts = {};
 let refreshTimer = null;
