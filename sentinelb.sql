@@ -80,6 +80,8 @@ INSERT INTO `animales` (`rfid`, `nombre`, `descripcion`, `raza`) VALUES ('001', 
 -- Datos: usuarios
 -- ------------------------------------------------------------
 INSERT INTO `usuarios` (`id`, `usuario`, `password`) VALUES (1, 'admin', 'sentinel2026');
+INSERT INTO `usuarios` (`id`, `usuario`, `password`) VALUES (2, 'sentinel', '1234');
+
 
 SET foreign_key_checks = 1;
 
