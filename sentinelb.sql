@@ -84,5 +84,5 @@ INSERT INTO `usuarios` (`id`, `usuario`, `password`) VALUES (2, 'sentinel', '123
 
 
 SET foreign_key_checks = 1;
-
+SET foreign_key_checks = 2;
 -- Fin del script SentinelB
