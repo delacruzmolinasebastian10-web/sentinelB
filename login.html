@@ -67,7 +67,7 @@ async function doLogin(){
       btn.disabled = false;
     }
   } catch(e) {
-    errEl.textContent = '❌ No se puede conectar al servidor. ¿Está corriendo sentinelb-server.js?';
+    errEl.textContent = '❌ No se puede conectar al servidor.';
     btn.textContent = 'Iniciar sesión';
     btn.disabled = false;
   }
