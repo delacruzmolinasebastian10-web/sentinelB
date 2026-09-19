@@ -19,49 +19,26 @@
 
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
 
-  <!-- Manifest de la PWA -->
   <link rel="manifest" href="./manifest.json">
 
-  <!-- Icono -->
   <link rel="icon" type="image/png" href="assets/logo.png">
 
-  <!-- Icono para agregar a pantalla de inicio en iOS -->
   <link rel="apple-touch-icon" href="icon-192.png">
 
-  <!-- ============================= -->
-  <!-- INFORMACIÓN DE LA APLICACIÓN -->
-  <!-- ============================= -->
-
   <title>SentinelB — Monitor Bovino</title>
-
-  <!-- ============================= -->
-  <!-- FUENTES -->
-  <!-- ============================= -->
 
   <link
     href="https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=Nunito:wght@300;400;500;600;700&display=swap"
     rel="stylesheet"
   >
 
-  <!-- ============================= -->
-  <!-- CHART.JS -->
-  <!-- ============================= -->
-
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-
-  <!-- ============================= -->
-  <!-- ESTILOS -->
-  <!-- ============================= -->
 
   <link rel="stylesheet" href="styles.css">
 
 </head>
 
 <body>
-
-<!-- ===================================================== -->
-<!-- APP -->
-<!-- ===================================================== -->
 
 <div id="app">
 
@@ -122,6 +99,15 @@
       >
         <span class="sb-item-icon">🐄</span>
         <span>Animales</span>
+      </div>
+
+      <div
+        class="sb-item"
+        data-sec="vacunas"
+        onclick="goTo('vacunas',this)"
+      >
+        <span class="sb-item-icon">💉</span>
+        <span>Vacunas</span>
       </div>
 
       <div
@@ -193,8 +179,6 @@
 
   <div class="main">
 
-    <!-- TOPBAR -->
-
     <div class="topbar">
 
       <button
@@ -233,10 +217,6 @@
 
     </div>
 
-
-    <!-- ================================================= -->
-    <!-- CONTENT -->
-    <!-- ================================================= -->
 
     <div class="content">
 
@@ -348,8 +328,6 @@
         </div>
 
 
-        <!-- GRÁFICAS -->
-
         <div class="grid-2">
 
           <div class="card">
@@ -400,8 +378,6 @@
 
         </div>
 
-
-        <!-- ÚLTIMAS LECTURAS -->
 
         <div class="card">
 
@@ -558,6 +534,92 @@
           class="animales-grid"
           id="gridAnimales"
         ></div>
+
+      </div>
+
+
+      <!-- =============================================== -->
+      <!-- VACUNAS -->
+      <!-- =============================================== -->
+
+      <div
+        id="sec-vacunas"
+        class="section"
+      >
+
+        <div class="animales-header">
+
+          <div>
+
+            <div
+              style="
+                font-family:'Syne',sans-serif;
+                font-weight:800;
+                font-size:1rem;
+              "
+            >
+              Monitoreo de vacunas
+            </div>
+
+            <div
+              style="
+                font-family:'Nunito',sans-serif;
+                font-size:.78rem;
+                color:var(--ink-3);
+                font-weight:600;
+                margin-top:3px;
+              "
+            >
+              Click en un registro para editar
+            </div>
+
+          </div>
+
+          <button
+            class="btn btn-primary btn-agregar"
+            onclick="abrirNuevaVacuna()"
+          >
+
+            <span
+              style="
+                font-size:1.1rem;
+                line-height:1;
+              "
+            >
+              +
+            </span>
+
+            Registrar vacuna
+
+          </button>
+
+        </div>
+
+        <div class="tbl-wrap card">
+
+          <table>
+
+            <thead>
+
+              <tr>
+                <th>Animal</th>
+                <th>Categoría</th>
+                <th>Vacuna</th>
+                <th>Lote</th>
+                <th>Aplicación</th>
+                <th>Próx. dosis</th>
+                <th>Responsable</th>
+              </tr>
+
+            </thead>
+
+            <tbody
+              id="tblVacunas"
+            ></tbody>
+
+          </table>
+
+        </div>
 
       </div>
 
@@ -910,6 +972,127 @@
 
 
 <!-- ===================================================== -->
+<!-- MODAL VACUNAS -->
+<!-- ===================================================== -->
+
+<div
+  class="modal-overlay"
+  id="modalVacuna"
+>
+
+  <div class="modal">
+
+    <h3 id="modalVacunaTitle">
+      💉 Registrar vacuna
+    </h3>
+
+    <div class="modal-field">
+      <label>
+        ID / Arete
+        <span class="required">*</span>
+      </label>
+      <select id="vRfid"></select>
+    </div>
+
+    <div class="modal-field">
+      <label>
+        Categoría
+        <span class="required">*</span>
+      </label>
+      <select id="vCategoria">
+        <option value="becerro">Becerro</option>
+        <option value="vaca">Vaca</option>
+        <option value="torete">Torete</option>
+        <option value="toro">Toro</option>
+      </select>
+    </div>
+
+    <div class="modal-field">
+      <label>
+        Vacuna
+        <span class="required">*</span>
+      </label>
+      <select id="vNombreVacuna">
+        <optgroup label="Virales">
+          <option>Antirrábica (Rabia bovina)</option>
+          <option>IBR-BVD (Rinotraqueítis / Diarrea Viral Bovina)</option>
+          <option>Parainfluenza-3 (PI3)</option>
+          <option>Estomatitis vesicular</option>
+        </optgroup>
+        <optgroup label="Bacterianas">
+          <option>Brucelosis (Cepa RB51)</option>
+          <option>Carbón sintomático / Carbón bacteridiano</option>
+          <option>Septicemia hemorrágica (Pasteurelosis)</option>
+          <option>Leptospirosis</option>
+          <option>Paratifoidea (Salmonelosis)</option>
+        </optgroup>
+        <optgroup label="Otra">
+          <option>Otra (especificar en observaciones)</option>
+        </optgroup>
+      </select>
+    </div>
+
+    <div class="modal-field">
+      <label>
+        Lote de producto
+      </label>
+      <input type="text" id="vLote" placeholder="Ej: L-2026-014">
+    </div>
+
+    <div class="modal-field">
+      <label>
+        Fecha de aplicación
+        <span class="required">*</span>
+      </label>
+      <input type="date" id="vFechaAplicacion">
+    </div>
+
+    <div class="modal-field">
+      <label>
+        Próxima dosis / refuerzo
+      </label>
+      <input type="date" id="vProximaDosis">
+    </div>
+
+    <div class="modal-field">
+      <label>
+        Responsable
+      </label>
+      <input type="text" id="vResponsable" placeholder="Ej: MVZ Juan Pérez">
+    </div>
+
+    <div class="modal-field">
+      <label>
+        Observaciones
+      </label>
+      <textarea id="vObservaciones" rows="3"></textarea>
+    </div>
+
+    <div class="modal-btns">
+
+      <button
+        class="btn btn-primary"
+        id="modalVacunaGuardarBtn"
+        onclick="guardarVacuna()"
+      >
+        💾 Guardar
+      </button>
+
+      <button
+        class="btn btn-secondary"
+        onclick="cerrarModalVacuna()"
+      >
+        Cancelar
+      </button>
+
+    </div>
+
+  </div>
+
+</div>
+
+
+<!-- ===================================================== -->
 <!-- JAVASCRIPT PRINCIPAL -->
 <!-- ===================================================== -->
 
@@ -921,10 +1104,6 @@
 <!-- ===================================================== -->
 
 <script>
-  // =====================================================
-  // MENÚ RESPONSIVE
-  // =====================================================
-
   function openSidebar() {
     const sidebar = document.querySelector(".sidebar");
     const overlay = document.getElementById("sidebarOverlay");
