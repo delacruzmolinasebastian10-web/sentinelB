@@ -170,18 +170,18 @@ async function leerTodas(){
 }
 
 // ── ANIMALES ───────────────────────────────────────────────────────────────
-async function loadAnimales(){
-  const animales = await fetch(`${BASE}/api/animales`).then(r=>r.json());
-  const grid = document.getElementById('gridAnimales');
-  if(!animales.length){
-    grid.innerHTML=`<div class="empty" style="grid-column:1/-1">
-      <div class="empty-icon">🐄</div>
-      <div class="empty-msg">Ningún animal registrado aún.<br><span style="font-size:.8rem;margin-top:6px;display:block;">Usa el botón "Agregar animal" o espera a que el ESP32 envíe datos.</span></div>
-    </div>`;
-    return;
-  }
-  grid.innerHTML = animales.map(a=>`
-    <div class="animal-card" onclick="abrirEditAnimal('${a.rfid}','${esc(a.nombre)}','${esc(a.raza)}','${a.fecha_nac||''}','${esc(a.descripcion)}')">
+const CATEGORIAS_ANIMAL = [
+  {key:'becerro', label:'🐮 Becerros'},
+  {key:'torete',  label:'🐂 Toretes'},
+  {key:'vaca',    label:'🐄 Vacas'},
+  {key:'toro',    label:'🐃 Toros'}
+];
+
+function esc(s){ return (s||'').replace(/'/g,"\\'"); }
+
+function animalCardHTML(a){
+  return `
+    <div class="animal-card" onclick="abrirEditAnimal('${a.rfid}','${esc(a.nombre)}','${esc(a.raza)}','${a.fecha_nac||''}','${esc(a.descripcion)}','${a.categoria||''}')">
       <div class="ac-rfid">📡 RFID: ${a.rfid}</div>
       <div class="ac-name">${a.nombre||'Sin nombre'}</div>
       ${a.raza?`<div class="ac-raza">${a.raza}</div>`:''}
@@ -193,10 +193,43 @@ async function loadAnimales(){
         <span class="ac-time">Última: ${a.ultima_lectura?fmtTime(a.ultima_lectura):'sin lecturas'}</span>
         <span style="font-size:.75rem;color:var(--green-2);font-weight:700;">✏️ Editar</span>
       </div>
-    </div>`).join('');
+    </div>`;
 }
 
-function esc(s){ return (s||'').replace(/'/g,"\\'"); }
+async function loadAnimales(){
+  const animales = await fetch(`${BASE}/api/animales`).then(r=>r.json());
+  const grid = document.getElementById('gridAnimales');
+  if(!animales.length){
+    grid.innerHTML=`<div class="empty">
+      <div class="empty-icon">🐄</div>
+      <div class="empty-msg">Ningún animal registrado aún.<br><span style="font-size:.8rem;margin-top:6px;display:block;">Usa el botón "Agregar animal" o espera a que el ESP32 envíe datos.</span></div>
+    </div>`;
+    return;
+  }
+
+  let html = '';
+
+  CATEGORIAS_ANIMAL.forEach(cat=>{
+    const delCat = animales.filter(a => (a.categoria||'').toLowerCase() === cat.key);
+    if(!delCat.length) return;
+    html += `
+      <div class="cat-group">
+        <div class="cat-group-title">${cat.label} <span class="cat-count">${delCat.length}</span></div>
+        <div class="animales-grid">${delCat.map(animalCardHTML).join('')}</div>
+      </div>`;
+  });
+
+  const sinCategoria = animales.filter(a => !a.categoria);
+  if(sinCategoria.length){
+    html += `
+      <div class="cat-group">
+        <div class="cat-group-title">❓ Sin categoría <span class="cat-count">${sinCategoria.length}</span></div>
+        <div class="animales-grid">${sinCategoria.map(animalCardHTML).join('')}</div>
+      </div>`;
+  }
+
+  grid.innerHTML = html;
+}
 
 // ── ABRIR MODAL: NUEVO ANIMAL ───────────────────────────────────────────────
 function abrirNuevoAnimal(){
@@ -209,6 +242,7 @@ function abrirNuevoAnimal(){
   document.getElementById('mRfid').classList.remove('error');
   document.getElementById('mNombre').value    = '';
   document.getElementById('mRaza').value      = '';
+  document.getElementById('mCategoria').value = '';
   document.getElementById('mFecha').value     = '';
   document.getElementById('mDesc').value      = '';
   document.getElementById('mRfidHint').textContent = '';
@@ -220,7 +254,7 @@ function abrirNuevoAnimal(){
 }
 
 // ── ABRIR MODAL: EDITAR ANIMAL ──────────────────────────────────────────────
-function abrirEditAnimal(rfid, nombre, raza, fecha, desc){
+function abrirEditAnimal(rfid, nombre, raza, fecha, desc, categoria){
   modoModal = 'editar';
   currentRfidEdit = rfid;
 
@@ -230,6 +264,7 @@ function abrirEditAnimal(rfid, nombre, raza, fecha, desc){
   document.getElementById('mRfid').classList.remove('error');
   document.getElementById('mNombre').value    = nombre;
   document.getElementById('mRaza').value      = raza;
+  document.getElementById('mCategoria').value = categoria || '';
   document.getElementById('mFecha').value     = fecha;
   document.getElementById('mDesc').value      = desc;
   document.getElementById('mRfidHint').textContent = '';
@@ -244,17 +279,23 @@ document.getElementById('modalAnimal').addEventListener('click',e=>{ if(e.target
 
 // ── GUARDAR ANIMAL ────────────────────────────────────────────────────────────
 async function guardarAnimal(){
-  const rfid    = document.getElementById('mRfid').value.trim().toUpperCase();
-  const nombre  = document.getElementById('mNombre').value.trim();
-  const raza    = document.getElementById('mRaza').value.trim();
-  const fecha   = document.getElementById('mFecha').value;
-  const desc    = document.getElementById('mDesc').value.trim();
+  const rfid      = document.getElementById('mRfid').value.trim().toUpperCase();
+  const nombre    = document.getElementById('mNombre').value.trim();
+  const raza      = document.getElementById('mRaza').value.trim();
+  const categoria = document.getElementById('mCategoria').value;
+  const fecha     = document.getElementById('mFecha').value;
+  const desc      = document.getElementById('mDesc').value.trim();
 
   if(!rfid){
     document.getElementById('mRfid').classList.add('error');
     document.getElementById('mRfidHint').textContent = 'El RFID es obligatorio.';
     document.getElementById('mRfidHint').className = 'field-hint error-msg';
     document.getElementById('mRfid').focus();
+    return;
+  }
+
+  if(!categoria){
+    alert('Selecciona la categoría del animal (becerro, vaca, torete o toro).');
     return;
   }
 
@@ -277,7 +318,7 @@ async function guardarAnimal(){
       const r = await fetch(`${BASE}/api/animales`, {
         method: 'POST',
         headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ rfid, nombre, raza, fecha_nac: fecha, descripcion: desc })
+        body: JSON.stringify({ rfid, nombre, raza, categoria, fecha_nac: fecha, descripcion: desc })
       });
       const d = await r.json();
       if(!d.ok) throw new Error(d.error || 'Error al crear');
@@ -285,7 +326,7 @@ async function guardarAnimal(){
       await fetch(`${BASE}/api/animales/${currentRfidEdit}`,{
         method:'PUT',
         headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ nombre, raza, fecha_nac: fecha, descripcion: desc })
+        body: JSON.stringify({ nombre, raza, categoria, fecha_nac: fecha, descripcion: desc })
       });
     }
 
