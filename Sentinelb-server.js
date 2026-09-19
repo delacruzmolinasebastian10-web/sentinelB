@@ -105,6 +105,24 @@ async function initDB() {
         console.log("🐄 SentinelB — Monitor Bovino");
         console.log("======================================");
         console.log("✅ Conectado a PostgreSQL correctamente");
+               // Crear tabla de vacunas si no existe
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS vacunas (
+                id SERIAL PRIMARY KEY,
+                rfid VARCHAR(50) NOT NULL REFERENCES animales(rfid),
+                categoria VARCHAR(20) NOT NULL CHECK (categoria IN ('becerro','vaca','torete','toro')),
+                nombre_vacuna VARCHAR(150) NOT NULL,
+                lote VARCHAR(80),
+                fecha_aplicacion DATE NOT NULL,
+                proxima_dosis DATE,
+                responsable VARCHAR(120),
+                observaciones TEXT,
+                alerta_generada BOOLEAN DEFAULT FALSE,
+                created_at TIMESTAMP DEFAULT NOW()
+            )
+        `);
+
+        console.log("✅ Tabla 'vacunas' verificada");
         console.log(`🌐 Puerto: ${PORT}`);
 
         client.release();
