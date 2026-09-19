@@ -35,35 +35,11 @@ app.use(express.json());
 
 app.use(express.urlencoded({ extended: true }));
 
-/*
- * Sirve los archivos de SentinelB:
- * index.html
- * login.html
- * styles.css
- * app.js
- * manifest.json
- * service-worker.js
- * assets/
- */
-
 app.use(express.static(path.join(__dirname)));
 
 
 /* ============================================================
    CONFIGURACIÓN POSTGRESQL
-   ============================================================
-
-   En Render:
-   DATABASE_URL será proporcionada mediante
-   Environment Variables.
-
-   En local:
-   Puedes definir DATABASE_URL manualmente.
-
-   Ejemplo local:
-
-   DATABASE_URL=postgresql://postgres:TU_PASSWORD@localhost:5432/sentinelb
-
    ============================================================ */
 
 if (!process.env.DATABASE_URL) {
@@ -74,10 +50,6 @@ if (!process.env.DATABASE_URL) {
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
 
-    /*
-     * Render trabaja con PostgreSQL mediante conexión SSL.
-     * En local se puede trabajar sin SSL.
-     */
     ssl:
         process.env.NODE_ENV === "production"
             ? { rejectUnauthorized: false }
@@ -105,7 +77,9 @@ async function initDB() {
         console.log("🐄 SentinelB — Monitor Bovino");
         console.log("======================================");
         console.log("✅ Conectado a PostgreSQL correctamente");
-               // Crear tabla de vacunas si no existe
+        console.log(`🌐 Puerto: ${PORT}`);
+
+        // Crear tabla de vacunas si no existe
         await pool.query(`
             CREATE TABLE IF NOT EXISTS vacunas (
                 id SERIAL PRIMARY KEY,
@@ -123,7 +97,6 @@ async function initDB() {
         `);
 
         console.log("✅ Tabla 'vacunas' verificada");
-        console.log(`🌐 Puerto: ${PORT}`);
 
         client.release();
 
@@ -134,11 +107,6 @@ async function initDB() {
         console.error("======================================");
         console.error(error.message);
 
-        /*
-         * No cerramos inmediatamente el proceso.
-         * Esto permite que Render pueda mostrar el error
-         * y que podamos diagnosticar la configuración.
-         */
     }
 }
 
@@ -190,11 +158,6 @@ async function clasificarAlerta(rfid, sal, tempCorp) {
     const avgSal =
         Number(result.rows[0]?.avg_sal) || Number(sal);
 
-    /*
-     * ALERTA ROJA:
-     * Bajo consumo de sal + temperatura elevada.
-     */
-
     if (sal < avgSal * 0.6 && tempCorp > 39.5) {
 
         return {
@@ -211,12 +174,6 @@ async function clasificarAlerta(rfid, sal, tempCorp) {
 
     }
 
-
-    /*
-     * ALERTA ROJA:
-     * Temperatura muy elevada.
-     */
-
     if (tempCorp > 40.0) {
 
         return {
@@ -231,12 +188,6 @@ async function clasificarAlerta(rfid, sal, tempCorp) {
         };
 
     }
-
-
-    /*
-     * ALERTA AMARILLA:
-     * Bajo consumo de sal.
-     */
 
     if (sal < avgSal * 0.7) {
 
@@ -254,11 +205,60 @@ async function clasificarAlerta(rfid, sal, tempCorp) {
 
     }
 
-
     return {
         tipo: "NORMAL",
         mensaje: ""
     };
+
+}
+
+
+/* ============================================================
+   VERIFICAR VACUNAS PRÓXIMAS A VENCER / VENCIDAS
+   ============================================================ */
+
+async function verificarVacunasProximas() {
+
+    try {
+
+        const proximas = await pool.query(`
+            SELECT v.*, a.nombre
+            FROM vacunas v
+            LEFT JOIN animales a ON v.rfid = a.rfid
+            WHERE v.proxima_dosis IS NOT NULL
+              AND v.alerta_generada = FALSE
+              AND v.proxima_dosis <= CURRENT_DATE + INTERVAL '7 days'
+        `);
+
+        for (const v of proximas.rows) {
+
+            const vencida = new Date(v.proxima_dosis) < new Date();
+
+            const tipo = vencida ? "ROJA" : "AMARILLA";
+
+            const mensaje = vencida
+                ? `💉 REFUERZO VENCIDO — ${v.nombre || v.rfid}: ${v.nombre_vacuna} venció el ${new Date(v.proxima_dosis).toLocaleDateString('es-MX')}.`
+                : `💉 PRÓXIMO REFUERZO — ${v.nombre || v.rfid}: ${v.nombre_vacuna} programado para el ${new Date(v.proxima_dosis).toLocaleDateString('es-MX')}.`;
+
+            await pool.query(
+                `INSERT INTO alertas (rfid, tipo, mensaje) VALUES ($1, $2, $3)`,
+                [v.rfid, tipo, mensaje]
+            );
+
+            await pool.query(
+                `UPDATE vacunas SET alerta_generada = TRUE WHERE id = $1`,
+                [v.id]
+            );
+
+        }
+
+        if (proximas.rows.length > 0) {
+            console.log(`💉 ${proximas.rows.length} alerta(s) de vacunación generada(s)`);
+        }
+
+    } catch (error) {
+        console.error("❌ Error verificarVacunasProximas:", error.message);
+    }
 
 }
 
@@ -297,11 +297,6 @@ app.post("/api/datos", async (req, res) => {
 
     try {
 
-        /*
-         * Registrar automáticamente el RFID
-         * si todavía no existe.
-         */
-
         await pool.query(
             `
             INSERT INTO animales (rfid)
@@ -311,22 +306,12 @@ app.post("/api/datos", async (req, res) => {
             [rfid]
         );
 
-
-        /*
-         * Determinar estado.
-         */
-
         const alerta =
             await clasificarAlerta(
                 rfid,
                 Number(sal),
                 Number(temp_corp)
             );
-
-
-        /*
-         * Guardar lectura.
-         */
 
         await pool.query(
             `
@@ -342,11 +327,6 @@ app.post("/api/datos", async (req, res) => {
                 alerta.tipo
             ]
         );
-
-
-        /*
-         * Crear alerta si corresponde.
-         */
 
         if (alerta.tipo !== "NORMAL") {
 
@@ -365,7 +345,6 @@ app.post("/api/datos", async (req, res) => {
 
         }
 
-
         console.log(
             `[${new Date().toLocaleString()}] ` +
             `ESP32 → RFID:${rfid} ` +
@@ -374,7 +353,6 @@ app.post("/api/datos", async (req, res) => {
             `TA:${temp_amb}°C ` +
             `→ ${alerta.tipo}`
         );
-
 
         res.json({
 
@@ -1029,6 +1007,96 @@ app.get(
 
 
 /* ============================================================
+   API — VACUNAS
+   ============================================================ */
+
+app.get("/api/vacunas", async (req, res) => {
+    try {
+        const { rfid } = req.query;
+        let query = `
+            SELECT v.*, a.nombre
+            FROM vacunas v
+            LEFT JOIN animales a ON v.rfid = a.rfid
+        `;
+        const params = [];
+        if (rfid) {
+            params.push(rfid);
+            query += ` WHERE v.rfid = $1`;
+        }
+        query += ` ORDER BY v.fecha_aplicacion DESC`;
+
+        const result = await pool.query(query, params);
+        res.json(result.rows);
+
+    } catch (error) {
+        console.error("❌ Error /api/vacunas:", error.message);
+        res.status(500).json({ ok: false, error: error.message });
+    }
+});
+
+app.post("/api/vacunas", async (req, res) => {
+    const {
+        rfid, categoria, nombre_vacuna, lote,
+        fecha_aplicacion, proxima_dosis, responsable, observaciones
+    } = req.body;
+
+    if (!rfid || !categoria || !nombre_vacuna || !fecha_aplicacion) {
+        return res.status(400).json({ ok: false, error: "Faltan campos obligatorios" });
+    }
+
+    try {
+        await pool.query(
+            `INSERT INTO vacunas
+             (rfid, categoria, nombre_vacuna, lote, fecha_aplicacion, proxima_dosis, responsable, observaciones)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+            [rfid, categoria, nombre_vacuna, lote || null, fecha_aplicacion,
+             proxima_dosis || null, responsable || null, observaciones || null]
+        );
+
+        console.log(`💉 Vacuna registrada: ${rfid} — ${nombre_vacuna}`);
+        res.json({ ok: true });
+
+    } catch (error) {
+        console.error("❌ Error creando vacuna:", error.message);
+        res.status(500).json({ ok: false, error: error.message });
+    }
+});
+
+app.put("/api/vacunas/:id", async (req, res) => {
+    const {
+        categoria, nombre_vacuna, lote,
+        fecha_aplicacion, proxima_dosis, responsable, observaciones
+    } = req.body;
+
+    try {
+        await pool.query(
+            `UPDATE vacunas SET
+                categoria=$1, nombre_vacuna=$2, lote=$3, fecha_aplicacion=$4,
+                proxima_dosis=$5, responsable=$6, observaciones=$7,
+                alerta_generada = CASE WHEN proxima_dosis IS DISTINCT FROM $5 THEN FALSE ELSE alerta_generada END
+             WHERE id=$8`,
+            [categoria, nombre_vacuna, lote || null, fecha_aplicacion,
+             proxima_dosis || null, responsable || null, observaciones || null, req.params.id]
+        );
+        res.json({ ok: true });
+
+    } catch (error) {
+        console.error("❌ Error editando vacuna:", error.message);
+        res.status(500).json({ ok: false, error: error.message });
+    }
+});
+
+app.delete("/api/vacunas/:id", async (req, res) => {
+    try {
+        await pool.query(`DELETE FROM vacunas WHERE id=$1`, [req.params.id]);
+        res.json({ ok: true });
+    } catch (error) {
+        res.status(500).json({ ok: false, error: error.message });
+    }
+});
+
+
+/* ============================================================
    REPORTE CSV
    ============================================================ */
 
@@ -1210,6 +1278,8 @@ async function startServer() {
 
     await initDB();
 
+    await verificarVacunasProximas();
+    setInterval(verificarVacunasProximas, 6 * 60 * 60 * 1000); // cada 6 horas
 
     app.listen(
         PORT,
