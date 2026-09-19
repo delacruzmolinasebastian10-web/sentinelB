@@ -47,7 +47,6 @@ body{font-family:'Nunito',sans-serif;background:var(--bg);color:var(--ink);heigh
   height: auto;
   display: block;
   margin: 0 auto;
-  /* El logo es verde olivo — se ve bien sobre fondo blanco de la tarjeta */
   filter: drop-shadow(0 2px 6px rgba(27,94,59,.15));
 }
 .login-sub{text-align:center;color:var(--ink-3);font-size:.88rem;margin-bottom:36px;}
@@ -93,7 +92,6 @@ body{font-family:'Nunito',sans-serif;background:var(--bg);color:var(--ink);heigh
   max-width: 190px;
   height: auto;
   display: block;
-  /* Logo verde olivo → blanco para contrastar con sidebar verde oscuro */
   filter: brightness(0) invert(1) drop-shadow(0 1px 4px rgba(0,0,0,.4));
   opacity: 0.95;
   transition: opacity .2s;
@@ -280,6 +278,19 @@ tbody tr:hover{background:var(--surface2);}
 .ac-footer{display:flex;align-items:center;justify-content:space-between;margin-top:14px;}
 .ac-time{font-size:.72rem;color:var(--ink-3);}
 
+/* ── AGRUPACIÓN DE ANIMALES POR CATEGORÍA ── */
+.cat-group{margin-bottom:28px;}
+.cat-group-title{
+  font-family:'Syne',sans-serif;font-weight:800;font-size:.92rem;
+  color:var(--green-1);margin-bottom:12px;
+  display:flex;align-items:center;gap:8px;
+  padding-bottom:8px;border-bottom:2px solid var(--green-5);
+}
+.cat-count{
+  background:var(--green-5);color:var(--green-2);
+  font-size:.72rem;font-weight:800;padding:2px 9px;border-radius:20px;
+}
+
 /* ── EDIT MODAL ── */
 .modal-overlay{
   position:fixed;inset:0;background:rgba(0,0,0,.4);
@@ -415,8 +426,6 @@ body.menu-open{
 /* ── RESPONSIVE ── */
 @media(max-width:900px){
 
-  /* En tablet y celular el sidebar se convierte
-     en un panel lateral deslizante. */
   .sidebar{
     width:280px;
     position:fixed;
@@ -434,8 +443,6 @@ body.menu-open{
     transform:translateX(0);
   }
 
-  /* NO ocultar los spans del menú.
-     Los íconos también son spans. */
   .sb-item span{
     display:inline;
   }
@@ -506,7 +513,6 @@ body.menu-open{
 
   html{font-size:14px;}
 
-  /* Login más compacto */
   .login-card{
     padding:32px 24px;
     max-width:340px;
@@ -515,7 +521,6 @@ body.menu-open{
 
   .login-logo-img{max-width:200px;}
 
-  /* Sidebar móvil */
   .sidebar{
     width:min(280px,86vw);
   }
@@ -530,7 +535,6 @@ body.menu-open{
     width:24px;
   }
 
-  /* Topbar */
   .topbar{
     padding:0 12px;
     height:56px;
@@ -566,7 +570,6 @@ body.menu-open{
     padding:16px;
   }
 
-  /* Tarjetas de estadísticas en una sola columna */
   .stats-row{
     grid-template-columns:1fr;
     gap:12px;
@@ -580,7 +583,6 @@ body.menu-open{
     font-size:1.6rem;
   }
 
-  /* Gráficas más bajas */
   .chart-wrap{
     height:180px;
   }
@@ -589,7 +591,6 @@ body.menu-open{
     padding:16px;
   }
 
-  /* Tarjetas de animales en una columna */
   .animales-grid{
     grid-template-columns:1fr;
   }
@@ -604,14 +605,12 @@ body.menu-open{
     justify-content:center;
   }
 
-  /* Modal ocupa casi toda la pantalla */
   .modal{
     padding:22px;
     max-width:92vw;
     max-height:85vh;
   }
 
-  /* Formulario de reportes en columna */
   .report-form{
     flex-direction:column;
     align-items:stretch;
@@ -621,7 +620,6 @@ body.menu-open{
     width:100%;
   }
 
-  /* Tabla desplazable horizontalmente */
   .tbl-wrap{
     overflow-x:auto;
     -webkit-overflow-scrolling:touch;
