@@ -794,3 +794,425 @@
                 class="btn btn-primary"
                 onclick="exportarCSV()"
               >
+                ⬇️ Descargar CSV
+              </button>
+
+            </div>
+
+          </div>
+
+        </div>
+
+
+        <div class="card">
+
+          <div class="card-title">
+
+            <span class="ct-icon">
+              📊
+            </span>
+
+            Resumen estadístico
+
+          </div>
+
+
+          <div id="resumenEstadistico">
+
+            <div class="empty">
+
+              <div class="empty-icon">
+                📊
+              </div>
+
+              <div class="empty-msg">
+                Cargando estadísticas...
+              </div>
+
+            </div>
+
+          </div>
+
+        </div>
+
+      </div>
+
+    </div>
+
+  </div>
+
+</div>
+
+
+<!-- ===================================================== -->
+<!-- MODAL EDITAR / AGREGAR ANIMAL -->
+<!-- ===================================================== -->
+
+<div
+  class="modal-overlay"
+  id="modalAnimal"
+>
+
+  <div class="modal">
+
+    <h3 id="modalAnimalTitle">
+      ✏️ Editar Animal
+    </h3>
+
+
+    <div class="modal-field">
+
+      <label>
+        RFID
+        <span class="required">*</span>
+      </label>
+
+      <input
+        type="text"
+        id="mRfid"
+        placeholder="Ej: A042, TAG-001..."
+      >
+
+      <div
+        class="field-hint"
+        id="mRfidHint"
+      ></div>
+
+    </div>
+
+
+    <div class="modal-field">
+
+      <label>
+        Nombre del animal
+      </label>
+
+      <input
+        type="text"
+        id="mNombre"
+        placeholder="Ej: Lupita, Vaca-03..."
+      >
+
+    </div>
+
+
+    <div class="modal-field">
+
+      <label>
+        Raza
+      </label>
+
+      <input
+        type="text"
+        id="mRaza"
+        placeholder="Ej: Holstein, Angus, Brahman..."
+      >
+
+    </div>
+
+
+    <div class="modal-field">
+
+      <label>
+        Categoría
+        <span class="required">*</span>
+      </label>
+
+      <select id="mCategoria">
+        <option value="">Selecciona categoría...</option>
+        <option value="becerro">Becerro</option>
+        <option value="novilla">Novilla</option>
+        <option value="vaca">Vaca</option>
+        <option value="torete">Torete</option>
+        <option value="toro">Toro</option>
+      </select>
+
+    </div>
+
+
+    <div class="modal-field">
+
+      <label>
+        Fecha de nacimiento
+      </label>
+
+      <input
+        type="date"
+        id="mFecha"
+      >
+
+    </div>
+
+
+    <div class="modal-field">
+
+      <label>
+        Notas / Descripción
+      </label>
+
+      <textarea
+        id="mDesc"
+        rows="3"
+        placeholder="Observaciones, historial médico..."
+      ></textarea>
+
+    </div>
+
+
+    <div class="modal-btns">
+
+      <button
+        class="btn btn-primary"
+        id="modalGuardarBtn"
+        onclick="guardarAnimal()"
+      >
+        💾 Guardar
+      </button>
+
+      <button
+        class="btn btn-secondary"
+        onclick="cerrarModal()"
+      >
+        Cancelar
+      </button>
+
+    </div>
+
+  </div>
+
+</div>
+
+
+<!-- ===================================================== -->
+<!-- MODAL VACUNAS -->
+<!-- ===================================================== -->
+
+<div
+  class="modal-overlay"
+  id="modalVacuna"
+>
+
+  <div class="modal">
+
+    <h3 id="modalVacunaTitle">
+      💉 Registrar vacuna
+    </h3>
+
+    <div class="modal-field">
+      <label>
+        ID / Arete
+        <span class="required">*</span>
+      </label>
+      <select id="vRfid"></select>
+    </div>
+
+    <div class="modal-field">
+      <label>
+        Categoría
+        <span class="required">*</span>
+      </label>
+      <select id="vCategoria">
+        <option value="becerro">Becerro</option>
+        <option value="novilla">Novilla</option>
+        <option value="vaca">Vaca</option>
+        <option value="torete">Torete</option>
+        <option value="toro">Toro</option>
+      </select>
+    </div>
+
+    <div class="modal-field">
+      <label>
+        Vacuna
+        <span class="required">*</span>
+      </label>
+      <select id="vNombreVacuna">
+        <optgroup label="Virales">
+          <option>Antirrábica (Rabia bovina)</option>
+          <option>IBR-BVD (Rinotraqueítis / Diarrea Viral Bovina)</option>
+          <option>Parainfluenza-3 (PI3)</option>
+          <option>Estomatitis vesicular</option>
+        </optgroup>
+        <optgroup label="Bacterianas">
+          <option>Brucelosis (Cepa RB51)</option>
+          <option>Carbón sintomático / Carbón bacteridiano</option>
+          <option>Septicemia hemorrágica (Pasteurelosis)</option>
+          <option>Leptospirosis</option>
+          <option>Paratifoidea (Salmonelosis)</option>
+        </optgroup>
+        <optgroup label="Otra">
+          <option>Otra (especificar en observaciones)</option>
+        </optgroup>
+      </select>
+    </div>
+
+    <div class="modal-field">
+      <label>
+        Lote de producto
+      </label>
+      <input type="text" id="vLote" placeholder="Ej: L-2026-014">
+    </div>
+
+    <div class="modal-field">
+      <label>
+        Fecha de aplicación
+        <span class="required">*</span>
+      </label>
+      <input type="date" id="vFechaAplicacion">
+    </div>
+
+    <div class="modal-field">
+      <label>
+        Próxima dosis / refuerzo
+      </label>
+      <input type="date" id="vProximaDosis">
+    </div>
+
+    <div class="modal-field">
+      <label>
+        Responsable
+      </label>
+      <input type="text" id="vResponsable" placeholder="Ej: MVZ Juan Pérez">
+    </div>
+
+    <div class="modal-field">
+      <label>
+        Observaciones
+      </label>
+      <textarea id="vObservaciones" rows="3"></textarea>
+    </div>
+
+    <div class="modal-btns">
+
+      <button
+        class="btn btn-primary"
+        id="modalVacunaGuardarBtn"
+        onclick="guardarVacuna()"
+      >
+        💾 Guardar
+      </button>
+
+      <button
+        class="btn btn-secondary"
+        onclick="cerrarModalVacuna()"
+      >
+        Cancelar
+      </button>
+
+    </div>
+
+  </div>
+
+</div>
+
+
+<!-- ===================================================== -->
+<!-- JAVASCRIPT PRINCIPAL -->
+<!-- ===================================================== -->
+
+<script src="app.js"></script>
+
+
+<!-- ===================================================== -->
+<!-- SERVICE WORKER / PWA -->
+<!-- ===================================================== -->
+
+<script>
+  function openSidebar() {
+    const sidebar = document.querySelector(".sidebar");
+    const overlay = document.getElementById("sidebarOverlay");
+    const toggle = document.getElementById("menuToggle");
+
+    if (!sidebar || !overlay || !toggle) return;
+
+    sidebar.classList.add("open");
+    overlay.classList.add("open");
+    toggle.classList.add("active");
+    toggle.setAttribute("aria-expanded", "true");
+    document.body.classList.add("menu-open");
+  }
+
+  function closeSidebar() {
+    const sidebar = document.querySelector(".sidebar");
+    const overlay = document.getElementById("sidebarOverlay");
+    const toggle = document.getElementById("menuToggle");
+
+    if (!sidebar || !overlay || !toggle) return;
+
+    sidebar.classList.remove("open");
+    overlay.classList.remove("open");
+    toggle.classList.remove("active");
+    toggle.setAttribute("aria-expanded", "false");
+    document.body.classList.remove("menu-open");
+  }
+
+  function toggleSidebar() {
+    const sidebar = document.querySelector(".sidebar");
+
+    if (sidebar && sidebar.classList.contains("open")) {
+      closeSidebar();
+    } else {
+      openSidebar();
+    }
+  }
+
+  document.addEventListener("click", function(event) {
+    const item = event.target.closest(".sb-item");
+
+    if (item && window.innerWidth <= 900) {
+      closeSidebar();
+    }
+  });
+
+  document.addEventListener("keydown", function(event) {
+    if (event.key === "Escape") {
+      closeSidebar();
+    }
+  });
+
+  window.addEventListener("resize", function() {
+    if (window.innerWidth > 900) {
+      closeSidebar();
+    }
+  });
+</script>
+
+<script>
+
+  if ("serviceWorker" in navigator) {
+
+    window.addEventListener("load", () => {
+
+      navigator.serviceWorker
+        .register("./service-worker.js")
+
+        .then((registration) => {
+
+          console.log(
+            "✅ SentinelB PWA: Service Worker registrado"
+          );
+
+          console.log(
+            "📂 Scope:",
+            registration.scope
+          );
+
+        })
+
+        .catch((error) => {
+
+          console.error(
+            "❌ SentinelB PWA: Error registrando Service Worker:",
+            error
+          );
+
+        });
+
+    });
+
+  }
+
+</script>
+
+
+</body>
+</html>
