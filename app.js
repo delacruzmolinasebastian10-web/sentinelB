@@ -35,7 +35,7 @@ setInterval(updateClock,1000); updateClock();
 
 // ── NAVEGACIÓN ─────────────────────────────────────────────────────────────
 const secTitles = {
-  dashboard:'Dashboard',alertas:'Alertas',animales:'Animales',
+  dashboard:'Dashboard',alertas:'Alertas',animales:'Animales',vacunas:'Monitoreo de vacunas',
   historial:'Historial por animal',reporte:'Reportes'
 };
 function goTo(sec, el){
@@ -47,6 +47,7 @@ function goTo(sec, el){
   if(sec==='dashboard') loadDashboard();
   if(sec==='alertas')   loadAlertas();
   if(sec==='animales')  loadAnimales();
+  if(sec==='vacunas')   loadVacunas();
   if(sec==='historial') loadSelectAnimales();
   if(sec==='reporte')   loadReporte();
 }
@@ -296,6 +297,109 @@ async function guardarAnimal(){
     alert('Error al guardar: ' + e.message);
     btn.disabled = false;
     btn.textContent = modoModal === 'nuevo' ? '➕ Registrar animal' : '💾 Guardar';
+  }
+}
+
+// ── VACUNAS ────────────────────────────────────────────────────────────────
+let currentVacunaEdit = null;
+let modoModalVacuna = 'nuevo';
+
+async function loadVacunas(){
+  const vacunas = await fetch(`${BASE}/api/vacunas`).then(r=>r.json());
+  const tbody = document.getElementById('tblVacunas');
+  if(!vacunas.length){
+    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--ink-3);">Sin vacunas registradas.</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = vacunas.map(v=>`
+    <tr style="cursor:pointer" onclick='abrirEditVacuna(${JSON.stringify(v).replace(/'/g,"&#39;")})'>
+      <td style="font-weight:600">${v.nombre||v.rfid}</td>
+      <td>${v.categoria}</td>
+      <td>${v.nombre_vacuna}</td>
+      <td>${v.lote||'—'}</td>
+      <td>${fmtTime(v.fecha_aplicacion)}</td>
+      <td style="color:${v.proxima_dosis && new Date(v.proxima_dosis)<new Date()?'var(--red)':'inherit'}">${v.proxima_dosis?fmtTime(v.proxima_dosis):'—'}</td>
+      <td>${v.responsable||'—'}</td>
+    </tr>`).join('');
+}
+
+async function abrirNuevaVacuna(){
+  modoModalVacuna = 'nuevo';
+  currentVacunaEdit = null;
+  document.getElementById('modalVacunaTitle').textContent = '💉 Registrar vacuna';
+
+  const animales = await fetch(`${BASE}/api/animales`).then(r=>r.json());
+  document.getElementById('vRfid').innerHTML = animales.map(a=>`<option value="${a.rfid}">${a.rfid}${a.nombre?' — '+a.nombre:''}</option>`).join('');
+
+  document.getElementById('vCategoria').value = 'vaca';
+  document.getElementById('vNombreVacuna').selectedIndex = 0;
+  document.getElementById('vLote').value = '';
+  document.getElementById('vFechaAplicacion').value = new Date().toISOString().split('T')[0];
+  document.getElementById('vProximaDosis').value = '';
+  document.getElementById('vResponsable').value = '';
+  document.getElementById('vObservaciones').value = '';
+  document.getElementById('modalVacunaGuardarBtn').textContent = '➕ Registrar';
+
+  document.getElementById('modalVacuna').classList.add('open');
+}
+
+function abrirEditVacuna(v){
+  modoModalVacuna = 'editar';
+  currentVacunaEdit = v.id;
+  document.getElementById('modalVacunaTitle').textContent = '✏️ Editar vacuna';
+
+  document.getElementById('vRfid').innerHTML = `<option value="${v.rfid}">${v.rfid}${v.nombre?' — '+v.nombre:''}</option>`;
+  document.getElementById('vCategoria').value = v.categoria;
+  document.getElementById('vNombreVacuna').value = v.nombre_vacuna;
+  document.getElementById('vLote').value = v.lote||'';
+  document.getElementById('vFechaAplicacion').value = v.fecha_aplicacion?.split('T')[0]||'';
+  document.getElementById('vProximaDosis').value = v.proxima_dosis?.split('T')[0]||'';
+  document.getElementById('vResponsable').value = v.responsable||'';
+  document.getElementById('vObservaciones').value = v.observaciones||'';
+  document.getElementById('modalVacunaGuardarBtn').textContent = '💾 Guardar';
+
+  document.getElementById('modalVacuna').classList.add('open');
+}
+
+function cerrarModalVacuna(){ document.getElementById('modalVacuna').classList.remove('open'); }
+document.getElementById('modalVacuna').addEventListener('click', e=>{ if(e.target===e.currentTarget) cerrarModalVacuna(); });
+
+async function guardarVacuna(){
+  const body = {
+    rfid: document.getElementById('vRfid').value,
+    categoria: document.getElementById('vCategoria').value,
+    nombre_vacuna: document.getElementById('vNombreVacuna').value,
+    lote: document.getElementById('vLote').value.trim(),
+    fecha_aplicacion: document.getElementById('vFechaAplicacion').value,
+    proxima_dosis: document.getElementById('vProximaDosis').value,
+    responsable: document.getElementById('vResponsable').value.trim(),
+    observaciones: document.getElementById('vObservaciones').value.trim()
+  };
+
+  if(!body.rfid || !body.fecha_aplicacion){
+    alert('Selecciona el animal y la fecha de aplicación.');
+    return;
+  }
+
+  const btn = document.getElementById('modalVacunaGuardarBtn');
+  btn.disabled = true;
+
+  try {
+    if(modoModalVacuna === 'nuevo'){
+      await fetch(`${BASE}/api/vacunas`, {
+        method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)
+      });
+    } else {
+      await fetch(`${BASE}/api/vacunas/${currentVacunaEdit}`, {
+        method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)
+      });
+    }
+    cerrarModalVacuna();
+    loadVacunas();
+  } catch(e){
+    alert('Error al guardar: '+e.message);
+  } finally {
+    btn.disabled = false;
   }
 }
 
