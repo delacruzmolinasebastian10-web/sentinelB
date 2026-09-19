@@ -639,4 +639,697 @@ app.get("/api/alertas", async (req, res) => {
 
 
 /* ============================================================
-   MARCAR ALERTA COMO
+   MARCAR ALERTA COMO LEÍDA
+   ============================================================ */
+
+app.put("/api/alertas/:id/leer", async (req, res) => {
+
+    try {
+
+        await pool.query(
+            `
+            UPDATE alertas
+            SET leida = TRUE
+            WHERE id = $1
+            `,
+            [req.params.id]
+        );
+
+
+        res.json({
+            ok: true
+        });
+
+
+    } catch (error) {
+
+        res.status(500).json({
+
+            ok: false,
+
+            error: error.message
+
+        });
+
+    }
+
+});
+
+
+/* ============================================================
+   MARCAR TODAS LAS ALERTAS COMO LEÍDAS
+   ============================================================ */
+
+app.put("/api/alertas/leer-todas", async (req, res) => {
+
+    try {
+
+        await pool.query(
+            `
+            UPDATE alertas
+            SET leida = TRUE
+            `
+        );
+
+
+        res.json({
+            ok: true
+        });
+
+
+    } catch (error) {
+
+        res.status(500).json({
+
+            ok: false,
+
+            error: error.message
+
+        });
+
+    }
+
+});
+
+
+/* ============================================================
+   API — ANIMALES
+   ============================================================ */
+
+app.get("/api/animales", async (req, res) => {
+
+    try {
+
+        const result =
+            await pool.query(
+                `
+                SELECT
+                    a.rfid,
+                    a.nombre,
+                    a.raza,
+                    a.categoria,
+                    a.descripcion,
+                    COUNT(l.id) AS total_lecturas,
+                    MAX(l.timestamp) AS ultima_lectura,
+                    AVG(l.temp_corp) AS avg_tc
+                FROM animales a
+                LEFT JOIN lecturas l
+                    ON a.rfid = l.rfid
+                GROUP BY
+                    a.rfid,
+                    a.nombre,
+                    a.raza,
+                    a.categoria,
+                    a.descripcion
+                ORDER BY
+                    ultima_lectura DESC NULLS LAST
+                `
+            );
+
+
+        res.json(result.rows);
+
+
+    } catch (error) {
+
+        console.error(
+            "❌ Error /api/animales:",
+            error.message
+        );
+
+        res.status(500).json({
+
+            ok: false,
+
+            error: error.message
+
+        });
+
+    }
+
+});
+
+
+/* ============================================================
+   CREAR ANIMAL
+   ============================================================ */
+
+app.post("/api/animales", async (req, res) => {
+
+    const {
+        rfid,
+        nombre,
+        raza,
+        categoria,
+        descripcion
+    } = req.body;
+
+
+    if (!rfid || !rfid.trim()) {
+
+        return res.status(400).json({
+
+            ok: false,
+
+            error: "El RFID es obligatorio"
+
+        });
+
+    }
+
+
+    const rfidLimpio =
+        rfid.trim().toUpperCase();
+
+
+    try {
+
+        const existe =
+            await pool.query(
+                `
+                SELECT rfid
+                FROM animales
+                WHERE rfid = $1
+                `,
+                [rfidLimpio]
+            );
+
+
+        if (existe.rows.length > 0) {
+
+            return res.status(409).json({
+
+                ok: false,
+
+                error:
+                    "Ya existe un animal con ese RFID"
+
+            });
+
+        }
+
+
+        await pool.query(
+            `
+            INSERT INTO animales
+            (rfid, nombre, raza, categoria, descripcion)
+            VALUES ($1, $2, $3, $4, $5)
+            `,
+            [
+                rfidLimpio,
+                nombre?.trim() || "",
+                raza?.trim() || "",
+                categoria || null,
+                descripcion?.trim() || ""
+            ]
+        );
+
+
+        console.log(
+            `➕ Animal registrado: ` +
+            `RFID=${rfidLimpio} ` +
+            `Nombre=${nombre || "-"} ` +
+            `Categoría=${categoria || "-"}`
+        );
+
+
+        res.json({
+
+            ok: true,
+
+            rfid: rfidLimpio
+
+        });
+
+
+    } catch (error) {
+
+        console.error(
+            "❌ Error creando animal:",
+            error.message
+        );
+
+        res.status(500).json({
+
+            ok: false,
+
+            error: error.message
+
+        });
+
+    }
+
+});
+
+
+/* ============================================================
+   EDITAR ANIMAL
+   ============================================================ */
+
+app.put("/api/animales/:rfid", async (req, res) => {
+
+    const {
+        nombre,
+        raza,
+        categoria,
+        descripcion
+    } = req.body;
+
+
+    try {
+
+        await pool.query(
+            `
+            UPDATE animales
+            SET
+                nombre = $1,
+                raza = $2,
+                categoria = $3,
+                descripcion = $4
+            WHERE rfid = $5
+            `,
+            [
+                nombre?.trim() || "",
+                raza?.trim() || "",
+                categoria || null,
+                descripcion?.trim() || "",
+                req.params.rfid
+            ]
+        );
+
+
+        res.json({
+            ok: true
+        });
+
+
+    } catch (error) {
+
+        console.error(
+            "❌ Error editando animal:",
+            error.message
+        );
+
+        res.status(500).json({
+
+            ok: false,
+
+            error: error.message
+
+        });
+
+    }
+
+});
+
+
+/* ============================================================
+   HISTORIAL DE ANIMAL
+   ============================================================ */
+
+app.get(
+    "/api/animales/:rfid/historial",
+    async (req, res) => {
+
+        const { rfid } = req.params;
+
+        const dias =
+            Math.max(
+                1,
+                parseInt(req.query.dias) || 7
+            );
+
+
+        try {
+
+            const historial =
+                await pool.query(
+                    `
+                    SELECT *
+                    FROM lecturas
+                    WHERE rfid = $1
+                      AND timestamp >=
+                          NOW() - ($2 * INTERVAL '1 day')
+                    ORDER BY timestamp ASC
+                    `,
+                    [
+                        rfid,
+                        dias
+                    ]
+                );
+
+
+            const animal =
+                await pool.query(
+                    `
+                    SELECT *
+                    FROM animales
+                    WHERE rfid = $1
+                    `,
+                    [rfid]
+                );
+
+
+            res.json({
+
+                animal:
+                    animal.rows[0] || null,
+
+                historial:
+                    historial.rows
+
+            });
+
+
+        } catch (error) {
+
+            console.error(
+                "❌ Error historial:",
+                error.message
+            );
+
+            res.status(500).json({
+
+                ok: false,
+
+                error: error.message
+
+            });
+
+        }
+
+    }
+);
+
+
+/* ============================================================
+   API — VACUNAS
+   ============================================================ */
+
+app.get("/api/vacunas", async (req, res) => {
+    try {
+        const { rfid } = req.query;
+        let query = `
+            SELECT v.*, a.nombre
+            FROM vacunas v
+            LEFT JOIN animales a ON v.rfid = a.rfid
+        `;
+        const params = [];
+        if (rfid) {
+            params.push(rfid);
+            query += ` WHERE v.rfid = $1`;
+        }
+        query += ` ORDER BY v.fecha_aplicacion DESC`;
+
+        const result = await pool.query(query, params);
+        res.json(result.rows);
+
+    } catch (error) {
+        console.error("❌ Error /api/vacunas:", error.message);
+        res.status(500).json({ ok: false, error: error.message });
+    }
+});
+
+app.post("/api/vacunas", async (req, res) => {
+    const {
+        rfid, categoria, nombre_vacuna, lote,
+        fecha_aplicacion, proxima_dosis, responsable, observaciones
+    } = req.body;
+
+    if (!rfid || !categoria || !nombre_vacuna || !fecha_aplicacion) {
+        return res.status(400).json({ ok: false, error: "Faltan campos obligatorios" });
+    }
+
+    try {
+        await pool.query(
+            `INSERT INTO vacunas
+             (rfid, categoria, nombre_vacuna, lote, fecha_aplicacion, proxima_dosis, responsable, observaciones)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+            [rfid, categoria, nombre_vacuna, lote || null, fecha_aplicacion,
+             proxima_dosis || null, responsable || null, observaciones || null]
+        );
+
+        console.log(`💉 Vacuna registrada: ${rfid} — ${nombre_vacuna}`);
+        res.json({ ok: true });
+
+    } catch (error) {
+        console.error("❌ Error creando vacuna:", error.message);
+        res.status(500).json({ ok: false, error: error.message });
+    }
+});
+
+app.put("/api/vacunas/:id", async (req, res) => {
+    const {
+        categoria, nombre_vacuna, lote,
+        fecha_aplicacion, proxima_dosis, responsable, observaciones
+    } = req.body;
+
+    try {
+        await pool.query(
+            `UPDATE vacunas SET
+                categoria=$1, nombre_vacuna=$2, lote=$3, fecha_aplicacion=$4,
+                proxima_dosis=$5, responsable=$6, observaciones=$7,
+                alerta_generada = CASE WHEN proxima_dosis IS DISTINCT FROM $5 THEN FALSE ELSE alerta_generada END
+             WHERE id=$8`,
+            [categoria, nombre_vacuna, lote || null, fecha_aplicacion,
+             proxima_dosis || null, responsable || null, observaciones || null, req.params.id]
+        );
+        res.json({ ok: true });
+
+    } catch (error) {
+        console.error("❌ Error editando vacuna:", error.message);
+        res.status(500).json({ ok: false, error: error.message });
+    }
+});
+
+app.delete("/api/vacunas/:id", async (req, res) => {
+    try {
+        await pool.query(`DELETE FROM vacunas WHERE id=$1`, [req.params.id]);
+        res.json({ ok: true });
+    } catch (error) {
+        res.status(500).json({ ok: false, error: error.message });
+    }
+});
+
+
+/* ============================================================
+   REPORTE CSV
+   ============================================================ */
+
+app.get("/api/reporte", async (req, res) => {
+
+    const {
+        desde,
+        hasta,
+        rfid
+    } = req.query;
+
+
+    let query = `
+        SELECT
+            l.*,
+            a.nombre
+        FROM lecturas l
+        LEFT JOIN animales a
+            ON l.rfid = a.rfid
+        WHERE 1 = 1
+    `;
+
+
+    const params = [];
+
+
+    if (desde) {
+
+        params.push(desde);
+
+        query +=
+            ` AND l.timestamp::date >= $${params.length}`;
+
+    }
+
+
+    if (hasta) {
+
+        params.push(hasta);
+
+        query +=
+            ` AND l.timestamp::date <= $${params.length}`;
+
+    }
+
+
+    if (rfid) {
+
+        params.push(rfid);
+
+        query +=
+            ` AND l.rfid = $${params.length}`;
+
+    }
+
+
+    query +=
+        " ORDER BY l.timestamp DESC";
+
+
+    try {
+
+        const result =
+            await pool.query(
+                query,
+                params
+            );
+
+
+        const filas = result.rows.map(r => {
+
+            const nombre =
+                String(r.nombre || "")
+                    .replace(/"/g, '""');
+
+            const rfidSeguro =
+                String(r.rfid || "")
+                    .replace(/"/g, '""');
+
+            return (
+                `${r.id},` +
+                `"${rfidSeguro}",` +
+                `"${nombre}",` +
+                `${r.sal},` +
+                `${r.temp_corp},` +
+                `${r.temp_amb},` +
+                `${r.alerta},` +
+                `"${r.timestamp}"`
+            );
+
+        });
+
+
+        const csv = [
+
+            "ID,RFID,Nombre,Sal(g),Temp_Corp(°C),Temp_Amb(°C),Alerta,Timestamp",
+
+            ...filas
+
+        ].join("\n");
+
+
+        res.setHeader(
+            "Content-Type",
+            "text/csv; charset=utf-8"
+        );
+
+
+        res.setHeader(
+            "Content-Disposition",
+            `attachment; filename="sentinelb_reporte_${Date.now()}.csv"`
+        );
+
+
+        res.send("\uFEFF" + csv);
+
+
+    } catch (error) {
+
+        console.error(
+            "❌ Error /api/reporte:",
+            error.message
+        );
+
+        res.status(500).json({
+
+            ok: false,
+
+            error: error.message
+
+        });
+
+    }
+
+});
+
+
+/* ============================================================
+   RUTA PRINCIPAL
+   ============================================================ */
+
+app.get("/", (req, res) => {
+
+    res.sendFile(
+        path.join(__dirname, "login.html")
+    );
+
+});
+
+
+/* ============================================================
+   MANEJO DE RUTA NO ENCONTRADA
+   ============================================================ */
+
+app.use((req, res) => {
+
+    if (req.path.startsWith("/api/")) {
+
+        return res.status(404).json({
+
+            ok: false,
+
+            error: "Endpoint no encontrado"
+
+        });
+
+    }
+
+    res.status(404).send("Página no encontrada");
+
+});
+
+
+/* ============================================================
+   INICIAR SERVIDOR
+   ============================================================ */
+
+async function startServer() {
+
+    await initDB();
+
+    await verificarVacunasProximas();
+    setInterval(verificarVacunasProximas, 6 * 60 * 60 * 1000); // cada 6 horas
+
+    app.listen(
+        PORT,
+        "0.0.0.0",
+        () => {
+
+            console.log("");
+            console.log("======================================");
+            console.log("🐄 SENTINELB — MONITOR BOVINO");
+            console.log("======================================");
+
+            console.log(
+                `🌐 Servidor escuchando en puerto ${PORT}`
+            );
+
+            console.log(
+                `📱 Aplicación: http://localhost:${PORT}`
+            );
+
+            console.log(
+                `❤️ Health Check: http://localhost:${PORT}/healthz`
+            );
+
+            console.log(
+                `📡 API ESP32: /api/datos`
+            );
+
+            console.log("======================================");
+            console.log("");
+
+        }
+    );
+
+}
+
+
+startServer();
