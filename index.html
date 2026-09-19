@@ -5,10 +5,6 @@
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-  <!-- ============================= -->
-  <!-- CONFIGURACIÓN PWA -->
-  <!-- ============================= -->
-
   <meta name="theme-color" content="#1b5e3b">
 
   <meta name="description" content="SentinelB — Monitor Bovino">
@@ -64,11 +60,11 @@
 
       <div
         class="sb-item active"
-        data-sec="inicio"
-        onclick="goTo('inicio',this)"
+        data-sec="dashboard"
+        onclick="goTo('dashboard',this)"
       >
         <span class="sb-item-icon">📊</span>
-        <span>inicio</span>
+        <span>Dashboard</span>
       </div>
 
       <div
@@ -530,10 +526,7 @@
 
         </div>
 
-        <div
-          class="animales-grid"
-          id="gridAnimales"
-        ></div>
+        <div id="gridAnimales"></div>
 
       </div>
 
@@ -921,6 +914,24 @@
     <div class="modal-field">
 
       <label>
+        Categoría
+        <span class="required">*</span>
+      </label>
+
+      <select id="mCategoria">
+        <option value="">Selecciona categoría...</option>
+        <option value="becerro">Becerro</option>
+        <option value="vaca">Vaca</option>
+        <option value="torete">Torete</option>
+        <option value="toro">Toro</option>
+      </select>
+
+    </div>
+
+
+    <div class="modal-field">
+
+      <label>
         Fecha de nacimiento
       </label>
 
@@ -1101,105 +1112,4 @@
 
 <!-- ===================================================== -->
 <!-- SERVICE WORKER / PWA -->
-<!-- ===================================================== -->
-
-<script>
-  function openSidebar() {
-    const sidebar = document.querySelector(".sidebar");
-    const overlay = document.getElementById("sidebarOverlay");
-    const toggle = document.getElementById("menuToggle");
-
-    if (!sidebar || !overlay || !toggle) return;
-
-    sidebar.classList.add("open");
-    overlay.classList.add("open");
-    toggle.classList.add("active");
-    toggle.setAttribute("aria-expanded", "true");
-    document.body.classList.add("menu-open");
-  }
-
-  function closeSidebar() {
-    const sidebar = document.querySelector(".sidebar");
-    const overlay = document.getElementById("sidebarOverlay");
-    const toggle = document.getElementById("menuToggle");
-
-    if (!sidebar || !overlay || !toggle) return;
-
-    sidebar.classList.remove("open");
-    overlay.classList.remove("open");
-    toggle.classList.remove("active");
-    toggle.setAttribute("aria-expanded", "false");
-    document.body.classList.remove("menu-open");
-  }
-
-  function toggleSidebar() {
-    const sidebar = document.querySelector(".sidebar");
-
-    if (sidebar && sidebar.classList.contains("open")) {
-      closeSidebar();
-    } else {
-      openSidebar();
-    }
-  }
-
-  document.addEventListener("click", function(event) {
-    const item = event.target.closest(".sb-item");
-
-    if (item && window.innerWidth <= 900) {
-      closeSidebar();
-    }
-  });
-
-  document.addEventListener("keydown", function(event) {
-    if (event.key === "Escape") {
-      closeSidebar();
-    }
-  });
-
-  window.addEventListener("resize", function() {
-    if (window.innerWidth > 900) {
-      closeSidebar();
-    }
-  });
-</script>
-
-<script>
-
-  if ("serviceWorker" in navigator) {
-
-    window.addEventListener("load", () => {
-
-      navigator.serviceWorker
-        .register("./service-worker.js")
-
-        .then((registration) => {
-
-          console.log(
-            "✅ SentinelB PWA: Service Worker registrado"
-          );
-
-          console.log(
-            "📂 Scope:",
-            registration.scope
-          );
-
-        })
-
-        .catch((error) => {
-
-          console.error(
-            "❌ SentinelB PWA: Error registrando Service Worker:",
-            error
-          );
-
-        });
-
-    });
-
-  }
-
-</script>
-
-
-</body>
-</html>
+<!--
