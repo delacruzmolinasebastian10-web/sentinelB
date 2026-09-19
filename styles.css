@@ -278,18 +278,59 @@ tbody tr:hover{background:var(--surface2);}
 .ac-footer{display:flex;align-items:center;justify-content:space-between;margin-top:14px;}
 .ac-time{font-size:.72rem;color:var(--ink-3);}
 
-/* ── AGRUPACIÓN DE ANIMALES POR CATEGORÍA ── */
-.cat-group{margin-bottom:28px;}
+/* ── AGRUPACIÓN DE ANIMALES POR CATEGORÍA (con color) ── */
+.cat-group{
+  border-radius:20px;
+  padding:20px 22px;
+  margin-bottom:20px;
+}
+.cat-group-header{
+  display:flex;align-items:center;justify-content:space-between;
+  margin-bottom:16px;
+}
 .cat-group-title{
-  font-family:'Syne',sans-serif;font-weight:800;font-size:.92rem;
-  color:var(--green-1);margin-bottom:12px;
-  display:flex;align-items:center;gap:8px;
-  padding-bottom:8px;border-bottom:2px solid var(--green-5);
+  display:flex;align-items:center;gap:12px;
+  font-family:'Syne',sans-serif;font-weight:800;font-size:1.05rem;color:var(--ink);
 }
-.cat-count{
-  background:var(--green-5);color:var(--green-2);
-  font-size:.72rem;font-weight:800;padding:2px 9px;border-radius:20px;
+.cat-icon-circle{
+  width:42px;height:42px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  font-size:1.25rem;flex-shrink:0;
 }
+.cat-count-pill{
+  padding:5px 16px;border-radius:20px;
+  font-size:.8rem;font-weight:800;flex-shrink:0;
+}
+
+/* Vacas — verde */
+.cat-vaca{background:#e4f4eb;}
+.cat-vaca .cat-icon-circle{background:#bdeccf;}
+.cat-vaca .cat-count-pill{background:#bdeccf;color:#1b5e3b;}
+
+/* Toros — azul */
+.cat-toro{background:#eaf2fd;}
+.cat-toro .cat-icon-circle{background:#bcd8f7;}
+.cat-toro .cat-count-pill{background:#bcd8f7;color:#1e3a8a;}
+
+/* Becerros — ámbar */
+.cat-becerro{background:#fdf3e0;}
+.cat-becerro .cat-icon-circle{background:#f5dd9c;}
+.cat-becerro .cat-count-pill{background:#f5dd9c;color:#92400e;}
+
+/* Toretes — turquesa */
+.cat-torete{background:#e6f6f6;}
+.cat-torete .cat-icon-circle{background:#a9e2e2;}
+.cat-torete .cat-count-pill{background:#a9e2e2;color:#0f4c4c;}
+
+/* Novillas — morado */
+.cat-novilla{background:#f1eafd;}
+.cat-novilla .cat-icon-circle{background:#d0bdf2;}
+.cat-novilla .cat-count-pill{background:#d0bdf2;color:#4c1d95;}
+
+/* Sin categoría — gris */
+.cat-sin{background:var(--surface2);}
+.cat-sin .cat-icon-circle{background:var(--ink-4);}
+.cat-sin .cat-count-pill{background:var(--ink-4);color:var(--ink-2);}
 
 /* ── EDIT MODAL ── */
 .modal-overlay{
