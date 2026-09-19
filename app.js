@@ -475,4 +475,122 @@ async function cargarHistorial(){
   }
 
   cont.innerHTML = `
-    <div class="grid-2"
+    <div class="grid-2" style="margin-bottom:16px;">
+      <div class="card">
+        <div class="card-title">🧂 Consumo de sal (${rfid})</div>
+        <div class="chart-wrap"><canvas id="chartHSal"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-title">🌡️ Temperatura corporal (${rfid})</div>
+        <div class="chart-wrap"><canvas id="chartHTc"></canvas></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">📋 Registros detallados</div>
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr><th>Fecha/Hora</th><th>Sal (g)</th><th>TC (°C)</th><th>TA (°C)</th><th>Estado</th></tr></thead>
+          <tbody>${d.historial.slice().reverse().map(r=>`
+            <tr>
+              <td style="font-size:.8rem;color:var(--ink-3)">${fmtTime(r.timestamp)}</td>
+              <td>${(+r.sal).toFixed(1)}</td>
+              <td style="color:${(+r.temp_corp)>39.5?'var(--red)':'inherit'};font-weight:${(+r.temp_corp)>39.5?700:400}">
+                ${(+r.temp_corp).toFixed(1)}</td>
+              <td>${(+r.temp_amb).toFixed(1)}</td>
+              <td><span class="badge ${r.alerta}">${r.alerta}</span></td>
+            </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>`;
+
+  const labels = d.historial.map(r=>fmtTimeShort(r.timestamp));
+
+  new Chart(document.getElementById('chartHSal').getContext('2d'),{
+    type:'line',
+    data:{ labels,
+      datasets:[
+        { label:'Sal (g)', data:d.historial.map(r=>(+r.sal).toFixed(1)),
+          borderColor:'#2d8653',backgroundColor:'rgba(45,134,83,.1)',fill:true,tension:.3,pointRadius:2 }
+      ]},
+    options:{responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{labels:{font:{family:'Nunito'},boxRadius:4}}},
+      scales:{x:{grid:{display:false},ticks:{maxRotation:45,font:{size:10}}},y:{beginAtZero:true}}
+    }
+  });
+
+  new Chart(document.getElementById('chartHTc').getContext('2d'),{
+    type:'line',
+    data:{ labels,
+      datasets:[
+        { label:'TC °C', data:d.historial.map(r=>(+r.temp_corp).toFixed(1)),
+          borderColor:'#1b5e3b',backgroundColor:'rgba(27,94,59,.08)',fill:true,tension:.3,pointRadius:2 },
+        { label:'TA °C', data:d.historial.map(r=>(+r.temp_amb).toFixed(1)),
+          borderColor:'#93c5fd',backgroundColor:'rgba(147,197,253,.1)',fill:true,tension:.3,pointRadius:2 },
+        { label:'Límite fiebre', data:d.historial.map(()=>39.5),
+          borderColor:'#dc2626',borderDash:[5,5],pointRadius:0,borderWidth:1.5,fill:false }
+      ]},
+    options:{responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{labels:{font:{family:'Nunito'},boxRadius:4}}},
+      scales:{x:{grid:{display:false},ticks:{maxRotation:45,font:{size:10}}},
+        y:{suggestedMin:15,suggestedMax:42}}
+    }
+  });
+}
+
+// ── REPORTE ────────────────────────────────────────────────────────────────
+async function loadReporte(){
+  await loadSelectAnimales();
+  const hoy   = new Date().toISOString().split('T')[0];
+  const hace7 = new Date(Date.now()-7*86400000).toISOString().split('T')[0];
+  document.getElementById('rDesde').value = hace7;
+  document.getElementById('rHasta').value = hoy;
+
+  const d = await fetch(`${BASE}/api/dashboard`).then(r=>r.json());
+  const res = document.getElementById('resumenEstadistico');
+  if(!d.promediosDia.length){
+    res.innerHTML=`<div class="empty"><div class="empty-icon">📊</div><div class="empty-msg">Sin datos hoy todavía</div></div>`;
+    return;
+  }
+  res.innerHTML = `
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>RFID</th><th>Prom. Sal</th><th>Prom. TC</th><th>Prom. TA</th><th>Última lectura</th></tr></thead>
+        <tbody>${d.promediosDia.map(r=>`
+          <tr>
+            <td><code style="font-size:.78rem;background:var(--surface2);padding:2px 7px;border-radius:5px;">${r.rfid}</code></td>
+            <td>${(+r.avg_sal).toFixed(1)} g</td>
+            <td style="color:${(+r.avg_tc)>39.5?'var(--red)':'inherit'};font-weight:${(+r.avg_tc)>39.5?700:400}">
+              ${(+r.avg_tc).toFixed(1)} °C</td>
+            <td>${(+r.avg_ta).toFixed(1)} °C</td>
+            <td style="font-size:.8rem;color:var(--ink-3)">${fmtTime(r.ultima)}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>`;
+}
+
+function exportarCSV(){
+  const desde = document.getElementById('rDesde').value;
+  const hasta  = document.getElementById('rHasta').value;
+  const rfid   = document.getElementById('rRfid').value;
+  let url = `${BASE}/api/reporte?`;
+  if(desde) url+=`desde=${desde}&`;
+  if(hasta)  url+=`hasta=${hasta}&`;
+  if(rfid)   url+=`rfid=${rfid}&`;
+  window.open(url,'_blank');
+}
+
+// ── UTILS ──────────────────────────────────────────────────────────────────
+function fmtTime(ts){
+  if(!ts) return '—';
+  return new Date(ts).toLocaleString('es-MX',{
+    day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'});
+}
+function fmtTimeShort(ts){
+  if(!ts) return '';
+  const d = new Date(ts);
+  return `${d.getDate()}/${d.getMonth()+1} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+}
+
+startApp();
