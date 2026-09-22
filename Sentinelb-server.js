@@ -79,6 +79,66 @@ async function initDB() {
         console.log("✅ Conectado a PostgreSQL correctamente");
         console.log(`🌐 Puerto: ${PORT}`);
 
+        // Crear tabla de animales (necesaria antes que las demás por las FK)
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS animales (
+                rfid VARCHAR(50) PRIMARY KEY,
+                nombre VARCHAR(120),
+                raza VARCHAR(80),
+                categoria VARCHAR(20),
+                fecha_nac DATE,
+                descripcion TEXT,
+                created_at TIMESTAMP DEFAULT NOW()
+            )
+        `);
+        console.log("✅ Tabla 'animales' verificada");
+
+        // Crear tabla de lecturas
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS lecturas (
+                id SERIAL PRIMARY KEY,
+                rfid VARCHAR(50) NOT NULL REFERENCES animales(rfid),
+                sal NUMERIC,
+                temp_corp NUMERIC,
+                temp_amb NUMERIC,
+                alerta VARCHAR(20),
+                timestamp TIMESTAMP DEFAULT NOW()
+            )
+        `);
+        console.log("✅ Tabla 'lecturas' verificada");
+
+        // Crear tabla de alertas
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS alertas (
+                id SERIAL PRIMARY KEY,
+                rfid VARCHAR(50) REFERENCES animales(rfid),
+                tipo VARCHAR(20),
+                mensaje TEXT,
+                leida BOOLEAN DEFAULT FALSE,
+                timestamp TIMESTAMP DEFAULT NOW()
+            )
+        `);
+        console.log("✅ Tabla 'alertas' verificada");
+
+        // Crear tabla de usuarios
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS usuarios (
+                id SERIAL PRIMARY KEY,
+                usuario VARCHAR(80) UNIQUE NOT NULL,
+                password VARCHAR(120) NOT NULL,
+                created_at TIMESTAMP DEFAULT NOW()
+            )
+        `);
+        console.log("✅ Tabla 'usuarios' verificada");
+
+        // Crear un usuario admin por defecto (solo si no existe ya)
+        await pool.query(`
+            INSERT INTO usuarios (usuario, password)
+            VALUES ('admin', 'admin123')
+            ON CONFLICT (usuario) DO NOTHING
+        `);
+        console.log("✅ Usuario admin verificado (admin / admin123)");
+
         // Crear tabla de vacunas si no existe
         await pool.query(`
             CREATE TABLE IF NOT EXISTS vacunas (
