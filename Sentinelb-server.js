@@ -1,1415 +1,1553 @@
-/**
- * ============================================================
- * SentinelB — Monitor Bovino
- * Backend Node.js + Express + PostgreSQL
- *
- * Preparado para:
- * - Desarrollo local
- * - Render
- * - PostgreSQL
- * - PWA
- * - ESP32
- * ============================================================
- */
-
 const express = require("express");
 const cors = require("cors");
 const path = require("path");
+const crypto = require("crypto");
+const bcrypt = require("bcryptjs");
+const jwt = require("jsonwebtoken");
 const { Pool } = require("pg");
 
 const app = express();
-
-/* ============================================================
-   CONFIGURACIÓN DEL SERVIDOR
-   ============================================================ */
-
 const PORT = process.env.PORT || 4000;
+const JWT_SECRET = process.env.JWT_SECRET;
 
-/* ============================================================
-   MIDDLEWARE
-   ============================================================ */
+if (!JWT_SECRET) {
+  console.error("❌ Falta JWT_SECRET en las variables de entorno.");
+  process.exit(1);
+}
 
 app.use(cors());
-
 app.use(express.json());
-
 app.use(express.urlencoded({ extended: true }));
-
 app.use(express.static(path.join(__dirname)));
 
-
-/* ============================================================
-   CONFIGURACIÓN POSTGRESQL
-   ============================================================ */
-
-if (!process.env.DATABASE_URL) {
-    console.warn("⚠️ DATABASE_URL no está configurada.");
-    console.warn("⚠️ El servidor necesitará DATABASE_URL para conectarse a PostgreSQL.");
-}
-
 const pool = new Pool({
-    connectionString: process.env.DATABASE_URL,
-
-    ssl:
-        process.env.NODE_ENV === "production"
-            ? { rejectUnauthorized: false }
-            : false,
-
-    max: 10,
-
-    idleTimeoutMillis: 30000,
-
-    connectionTimeoutMillis: 10000
+  connectionString: process.env.DATABASE_URL,
+  ssl: process.env.NODE_ENV === "production"
+    ? { rejectUnauthorized: false }
+    : false,
+  max: 10,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 10000
 });
 
-
-/* ============================================================
-   INICIALIZAR BASE DE DATOS
-   ============================================================ */
-
-async function initDB() {
-
-    try {
-
-        const client = await pool.connect();
-
-        console.log("======================================");
-        console.log("🐄 SentinelB — Monitor Bovino");
-        console.log("======================================");
-        console.log("✅ Conectado a PostgreSQL correctamente");
-        console.log(`🌐 Puerto: ${PORT}`);
-
-        // Crear tabla de animales (necesaria antes que las demás por las FK)
-        await pool.query(`
-            CREATE TABLE IF NOT EXISTS animales (
-                rfid VARCHAR(50) PRIMARY KEY,
-                nombre VARCHAR(120),
-                raza VARCHAR(80),
-                categoria VARCHAR(20),
-                fecha_nac DATE,
-                descripcion TEXT,
-                created_at TIMESTAMP DEFAULT NOW()
-            )
-        `);
-        console.log("✅ Tabla 'animales' verificada");
-
-        // Crear tabla de lecturas
-        await pool.query(`
-            CREATE TABLE IF NOT EXISTS lecturas (
-                id SERIAL PRIMARY KEY,
-                rfid VARCHAR(50) NOT NULL REFERENCES animales(rfid),
-                sal NUMERIC,
-                temp_corp NUMERIC,
-                temp_amb NUMERIC,
-                alerta VARCHAR(20),
-                timestamp TIMESTAMP DEFAULT NOW()
-            )
-        `);
-        console.log("✅ Tabla 'lecturas' verificada");
-
-        // Crear tabla de alertas
-        await pool.query(`
-            CREATE TABLE IF NOT EXISTS alertas (
-                id SERIAL PRIMARY KEY,
-                rfid VARCHAR(50) REFERENCES animales(rfid),
-                tipo VARCHAR(20),
-                mensaje TEXT,
-                leida BOOLEAN DEFAULT FALSE,
-                timestamp TIMESTAMP DEFAULT NOW()
-            )
-        `);
-        console.log("✅ Tabla 'alertas' verificada");
-
-        // Crear tabla de usuarios
-        await pool.query(`
-            CREATE TABLE IF NOT EXISTS usuarios (
-                id SERIAL PRIMARY KEY,
-                usuario VARCHAR(80) UNIQUE NOT NULL,
-                password VARCHAR(120) NOT NULL,
-                created_at TIMESTAMP DEFAULT NOW()
-            )
-        `);
-        console.log("✅ Tabla 'usuarios' verificada");
-
-        // Crear un usuario admin por defecto (solo si no existe ya)
-        await pool.query(`
-            INSERT INTO usuarios (usuario, password)
-            VALUES ('admin', 'admin123')
-            ON CONFLICT (usuario) DO NOTHING
-        `);
-        console.log("✅ Usuario admin verificado (admin / admin123)");
-
-        // Crear tabla de vacunas si no existe
-        await pool.query(`
-            CREATE TABLE IF NOT EXISTS vacunas (
-                id SERIAL PRIMARY KEY,
-                rfid VARCHAR(50) NOT NULL REFERENCES animales(rfid),
-                categoria VARCHAR(20) NOT NULL,
-                nombre_vacuna VARCHAR(150) NOT NULL,
-                lote VARCHAR(80),
-                fecha_aplicacion DATE NOT NULL,
-                proxima_dosis DATE,
-                responsable VARCHAR(120),
-                observaciones TEXT,
-                alerta_generada BOOLEAN DEFAULT FALSE,
-                created_at TIMESTAMP DEFAULT NOW()
-            )
-        `);
-
-        console.log("✅ Tabla 'vacunas' verificada");
-
-        // Agregar columna de categoría a animales si no existe
-        await pool.query(`
-            ALTER TABLE animales
-            ADD COLUMN IF NOT EXISTS categoria VARCHAR(20)
-        `);
-
-        console.log("✅ Columna 'categoria' verificada en animales");
-
-        // Actualizar categorías permitidas para incluir "novilla"
-        await pool.query(`
-            ALTER TABLE animales DROP CONSTRAINT IF EXISTS animales_categoria_check
-        `);
-        await pool.query(`
-            ALTER TABLE animales
-            ADD CONSTRAINT animales_categoria_check
-            CHECK (categoria IN ('becerro','vaca','torete','toro','novilla'))
-        `);
-
-        await pool.query(`
-            ALTER TABLE vacunas DROP CONSTRAINT IF EXISTS vacunas_categoria_check
-        `);
-        await pool.query(`
-            ALTER TABLE vacunas
-            ADD CONSTRAINT vacunas_categoria_check
-            CHECK (categoria IN ('becerro','vaca','torete','toro','novilla'))
-        `);
-
-        console.log("✅ Categorías actualizadas (incluye 'novilla')");
-
-        client.release();
-
-    } catch (error) {
-
-        console.error("======================================");
-        console.error("❌ ERROR CONECTANDO A POSTGRESQL");
-        console.error("======================================");
-        console.error(error.message);
-
-    }
+function signToken(user) {
+  return jwt.sign(
+    {
+      sub: user.id,
+      cliente_id: user.cliente_id,
+      usuario: user.usuario,
+      rol: user.rol
+    },
+    JWT_SECRET,
+    { expiresIn: "12h" }
+  );
 }
 
+function getCookie(req, name) {
+  const raw = req.headers.cookie || "";
+  const parts = raw.split(";").map(x => x.trim());
+  const item = parts.find(x => x.startsWith(name + "="));
 
-/* ============================================================
-   HEALTH CHECK PARA RENDER
-   ============================================================ */
+  return item
+    ? decodeURIComponent(item.slice(name.length + 1))
+    : null;
+}
 
-app.get("/healthz", async (req, res) => {
+function auth(req, res, next) {
+  const header = req.headers.authorization || "";
 
-    try {
+  const bearer = header.startsWith("Bearer ")
+    ? header.slice(7)
+    : null;
 
-        await pool.query("SELECT 1");
+  const token = bearer || getCookie(req, "sb_token");
 
-        res.status(200).json({
-            ok: true,
-            servicio: "SentinelB",
-            database: "PostgreSQL"
-        });
+  if (!token) {
+    return res.status(401).json({
+      ok: false,
+      error: "Token requerido"
+    });
+  }
 
-    } catch (error) {
+  try {
+    req.user = jwt.verify(token, JWT_SECRET);
+    next();
+  } catch {
+    return res.status(401).json({
+      ok: false,
+      error: "Token inválido o expirado"
+    });
+  }
+}
 
-        res.status(500).json({
-            ok: false,
-            error: "Base de datos no disponible"
-        });
-
+function role(...roles) {
+  return (req, res, next) => {
+    if (!roles.includes(req.user.rol)) {
+      return res.status(403).json({
+        ok: false,
+        error: "No tienes permisos para esta operación"
+      });
     }
 
-});
+    next();
+  };
+}
 
+async function clienteActivo(clienteId) {
+  const r = await pool.query(
+    "SELECT id FROM clientes WHERE id=$1 AND activo=TRUE",
+    [clienteId]
+  );
 
-/* ============================================================
-   LÓGICA DE ALERTAS
-   ============================================================ */
+  return r.rows.length > 0;
+}
 
-async function clasificarAlerta(rfid, sal, tempCorp) {
+async function getAnimal(clienteId, rfid) {
+  const r = await pool.query(
+    "SELECT * FROM animales WHERE cliente_id=$1 AND rfid=$2",
+    [clienteId, rfid]
+  );
 
-    const result = await pool.query(
-        `
-        SELECT AVG(sal) AS avg_sal
-        FROM lecturas
-        WHERE rfid = $1
-          AND timestamp >= NOW() - INTERVAL '7 days'
-        `,
-        [rfid]
-    );
+  return r.rows[0] || null;
+}
 
-    const avgSal =
-        Number(result.rows[0]?.avg_sal) || Number(sal);
+async function clasificarAlerta(clienteId, rfid, sal, tempCorp) {
+  const result = await pool.query(
+    `SELECT AVG(sal) AS avg_sal
+     FROM lecturas
+     WHERE cliente_id=$1
+       AND rfid=$2
+       AND timestamp >= NOW() - INTERVAL '7 days'`,
+    [clienteId, rfid]
+  );
 
-    if (sal < avgSal * 0.6 && tempCorp > 39.5) {
+  const avgSal =
+    Number(result.rows[0]?.avg_sal) || Number(sal);
 
-        return {
-
-            tipo: "ROJA",
-
-            mensaje:
-                `⚠️ RIESGO SANITARIO — Animal ${rfid}: ` +
-                `Sal caída ${Math.round((1 - sal / avgSal) * 100)}% ` +
-                `bajo lo normal + TC ${tempCorp}°C. ` +
-                `Requiere evaluación veterinaria.`
-
-        };
-
-    }
-
-    if (tempCorp > 40.0) {
-
-        return {
-
-            tipo: "ROJA",
-
-            mensaje:
-                `🌡️ FIEBRE SEVERA — Animal ${rfid}: ` +
-                `TC ${tempCorp}°C. ` +
-                `Requiere evaluación veterinaria.`
-
-        };
-
-    }
-
-    if (sal < avgSal * 0.7) {
-
-        return {
-
-            tipo: "AMARILLA",
-
-            mensaje:
-                `🟡 BAJO CONSUMO DE SAL — Animal ${rfid}: ` +
-                `Sal ${Math.round(sal)}g ` +
-                `(${Math.round((1 - sal / avgSal) * 100)}% ` +
-                `bajo lo normal). Verificar comedero.`
-
-        };
-
-    }
-
+  if (sal < avgSal * 0.6 && tempCorp > 39.5) {
     return {
-        tipo: "NORMAL",
-        mensaje: ""
+      tipo: "ROJA",
+      mensaje:
+        `⚠️ RIESGO SANITARIO — Animal ${rfid}: ` +
+        `Sal caída ${Math.round((1 - sal / avgSal) * 100)}% ` +
+        `bajo lo normal + TC ${tempCorp}°C. ` +
+        `Requiere evaluación veterinaria.`
     };
+  }
 
+  if (tempCorp > 40) {
+    return {
+      tipo: "ROJA",
+      mensaje:
+        `🌡️ FIEBRE SEVERA — Animal ${rfid}: ` +
+        `TC ${tempCorp}°C. Requiere evaluación veterinaria.`
+    };
+  }
+
+  if (sal < avgSal * 0.7) {
+    return {
+      tipo: "AMARILLA",
+      mensaje:
+        `🟡 BAJO CONSUMO DE SAL — Animal ${rfid}: ` +
+        `Sal ${Math.round(sal)}g ` +
+        `(${Math.round((1 - sal / avgSal) * 100)}% bajo lo normal). ` +
+        `Verificar comedero.`
+    };
+  }
+
+  return {
+    tipo: "NORMAL",
+    mensaje: ""
+  };
 }
-
-
-/* ============================================================
-   VERIFICAR VACUNAS PRÓXIMAS A VENCER / VENCIDAS
-   ============================================================ */
 
 async function verificarVacunasProximas() {
+  try {
+    const proximas = await pool.query(`
+      SELECT v.*, a.nombre
+      FROM vacunas v
+      LEFT JOIN animales a
+        ON v.cliente_id=a.cliente_id
+       AND v.rfid=a.rfid
+      WHERE v.proxima_dosis IS NOT NULL
+        AND v.alerta_generada=FALSE
+        AND v.proxima_dosis <= CURRENT_DATE + INTERVAL '7 days'
+    `);
 
-    try {
+    for (const v of proximas.rows) {
+      const vencida =
+        new Date(v.proxima_dosis) < new Date();
 
-        const proximas = await pool.query(`
-            SELECT v.*, a.nombre
-            FROM vacunas v
-            LEFT JOIN animales a ON v.rfid = a.rfid
-            WHERE v.proxima_dosis IS NOT NULL
-              AND v.alerta_generada = FALSE
-              AND v.proxima_dosis <= CURRENT_DATE + INTERVAL '7 days'
-        `);
+      const tipo = vencida
+        ? "ROJA"
+        : "AMARILLA";
 
-        for (const v of proximas.rows) {
+      const fecha =
+        new Date(v.proxima_dosis)
+          .toLocaleDateString("es-MX");
 
-            const vencida = new Date(v.proxima_dosis) < new Date();
+      const mensaje = vencida
+        ? `💉 REFUERZO VENCIDO — ${
+            v.nombre || v.rfid
+          }: ${v.nombre_vacuna} venció el ${fecha}.`
+        : `💉 PRÓXIMO REFUERZO — ${
+            v.nombre || v.rfid
+          }: ${v.nombre_vacuna} programado para el ${fecha}.`;
 
-            const tipo = vencida ? "ROJA" : "AMARILLA";
+      await pool.query(
+        `INSERT INTO alertas
+         (cliente_id, rfid, tipo, mensaje)
+         VALUES ($1,$2,$3,$4)`,
+        [
+          v.cliente_id,
+          v.rfid,
+          tipo,
+          mensaje
+        ]
+      );
 
-            const mensaje = vencida
-                ? `💉 REFUERZO VENCIDO — ${v.nombre || v.rfid}: ${v.nombre_vacuna} venció el ${new Date(v.proxima_dosis).toLocaleDateString('es-MX')}.`
-                : `💉 PRÓXIMO REFUERZO — ${v.nombre || v.rfid}: ${v.nombre_vacuna} programado para el ${new Date(v.proxima_dosis).toLocaleDateString('es-MX')}.`;
-
-            await pool.query(
-                `INSERT INTO alertas (rfid, tipo, mensaje) VALUES ($1, $2, $3)`,
-                [v.rfid, tipo, mensaje]
-            );
-
-            await pool.query(
-                `UPDATE vacunas SET alerta_generada = TRUE WHERE id = $1`,
-                [v.id]
-            );
-
-        }
-
-        if (proximas.rows.length > 0) {
-            console.log(`💉 ${proximas.rows.length} alerta(s) de vacunación generada(s)`);
-        }
-
-    } catch (error) {
-        console.error("❌ Error verificarVacunasProximas:", error.message);
+      await pool.query(
+        `UPDATE vacunas
+         SET alerta_generada=TRUE
+         WHERE cliente_id=$1
+           AND id=$2`,
+        [
+          v.cliente_id,
+          v.id
+        ]
+      );
     }
-
+  } catch (e) {
+    console.error(
+      "❌ Error verificarVacunasProximas:",
+      e.message
+    );
+  }
 }
 
 
-/* ============================================================
-   API — ESP32
-   ============================================================ */
+/* =========================================================
+   HEALTH
+========================================================= */
 
-app.post("/api/datos", async (req, res) => {
+app.get("/healthz", async (req, res) => {
+  try {
+    await pool.query("SELECT 1");
 
-    const {
-        rfid,
-        sal,
-        temp_corp,
-        temp_amb
-    } = req.body;
-
-
-    if (
-        !rfid ||
-        sal === undefined ||
-        temp_corp === undefined ||
-        temp_amb === undefined
-    ) {
-
-        return res.status(400).json({
-
-            ok: false,
-
-            error: "Faltan campos"
-
-        });
-
-    }
-
-
-    try {
-
-        await pool.query(
-            `
-            INSERT INTO animales (rfid)
-            VALUES ($1)
-            ON CONFLICT (rfid) DO NOTHING
-            `,
-            [rfid]
-        );
-
-        const alerta =
-            await clasificarAlerta(
-                rfid,
-                Number(sal),
-                Number(temp_corp)
-            );
-
-        await pool.query(
-            `
-            INSERT INTO lecturas
-            (rfid, sal, temp_corp, temp_amb, alerta)
-            VALUES ($1, $2, $3, $4, $5)
-            `,
-            [
-                rfid,
-                Number(sal),
-                Number(temp_corp),
-                Number(temp_amb),
-                alerta.tipo
-            ]
-        );
-
-        if (alerta.tipo !== "NORMAL") {
-
-            await pool.query(
-                `
-                INSERT INTO alertas
-                (rfid, tipo, mensaje)
-                VALUES ($1, $2, $3)
-                `,
-                [
-                    rfid,
-                    alerta.tipo,
-                    alerta.mensaje
-                ]
-            );
-
-        }
-
-        console.log(
-            `[${new Date().toLocaleString()}] ` +
-            `ESP32 → RFID:${rfid} ` +
-            `Sal:${sal}g ` +
-            `TC:${temp_corp}°C ` +
-            `TA:${temp_amb}°C ` +
-            `→ ${alerta.tipo}`
-        );
-
-        res.json({
-
-            ok: true,
-
-            alerta: alerta.tipo
-
-        });
-
-
-    } catch (error) {
-
-        console.error(
-            "❌ Error /api/datos:",
-            error.message
-        );
-
-        res.status(500).json({
-
-            ok: false,
-
-            error: error.message
-
-        });
-
-    }
-
+    res.json({
+      ok: true,
+      servicio: "SentinelB",
+      database: "PostgreSQL"
+    });
+  } catch {
+    res.status(500).json({
+      ok: false,
+      error: "Base de datos no disponible"
+    });
+  }
 });
 
 
-/* ============================================================
-   API — LOGIN
-   ============================================================ */
+/* =========================================================
+   LOGIN
+========================================================= */
 
 app.post("/api/login", async (req, res) => {
+  const { usuario, password } = req.body;
 
-    const {
-        usuario,
-        password
-    } = req.body;
+  if (!usuario || !password) {
+    return res.status(400).json({
+      ok: false,
+      error: "Usuario y contraseña son obligatorios"
+    });
+  }
 
+  try {
+    const result = await pool.query(`
+      SELECT
+        u.id,
+        u.usuario,
+        u.password_hash,
+        u.rol,
+        u.cliente_id,
+        c.nombre AS cliente_nombre
+      FROM usuarios u
+      JOIN clientes c
+        ON c.id=u.cliente_id
+      WHERE u.usuario=$1
+        AND u.activo=TRUE
+        AND c.activo=TRUE
+    `, [usuario.trim()]);
 
-    try {
-
-        const result = await pool.query(
-            `
-            SELECT *
-            FROM usuarios
-            WHERE usuario = $1
-              AND password = $2
-            `,
-            [
-                usuario,
-                password
-            ]
-        );
-
-
-        if (result.rows.length > 0) {
-
-            return res.json({
-
-                ok: true,
-
-                usuario: result.rows[0].usuario
-
-            });
-
-        }
-
-
-        res.status(401).json({
-
-            ok: false,
-
-            error: "Credenciales incorrectas"
-
-        });
-
-
-    } catch (error) {
-
-        console.error(
-            "❌ Error /api/login:",
-            error.message
-        );
-
-        res.status(500).json({
-
-            ok: false,
-
-            error: error.message
-
-        });
-
+    if (!result.rows.length) {
+      return res.status(401).json({
+        ok: false,
+        error: "Credenciales incorrectas"
+      });
     }
 
+    const user = result.rows[0];
+
+    const valid =
+      await bcrypt.compare(
+        password,
+        user.password_hash
+      );
+
+    if (!valid) {
+      return res.status(401).json({
+        ok: false,
+        error: "Credenciales incorrectas"
+      });
+    }
+
+    const token = signToken(user);
+
+    const secure =
+      process.env.NODE_ENV === "production"
+        ? " Secure;"
+        : "";
+
+    res.setHeader(
+      "Set-Cookie",
+      `sb_token=${encodeURIComponent(token)}; HttpOnly;${secure} SameSite=Strict; Path=/; Max-Age=43200`
+    );
+
+    res.json({
+      ok: true,
+      token,
+      usuario: user.usuario,
+      rol: user.rol,
+      cliente_id: user.cliente_id,
+      cliente: user.cliente_nombre
+    });
+
+  } catch (e) {
+    console.error(
+      "❌ Error /api/login:",
+      e.message
+    );
+
+    res.status(500).json({
+      ok: false,
+      error: "Error interno del servidor"
+    });
+  }
 });
 
 
-/* ============================================================
-   API — DASHBOARD
-   ============================================================ */
+/* =========================================================
+   LOGOUT
+========================================================= */
 
-app.get("/api/dashboard", async (req, res) => {
+app.post("/api/logout", (req, res) => {
+  const secure =
+    process.env.NODE_ENV === "production"
+      ? " Secure;"
+      : "";
 
-    try {
+  res.setHeader(
+    "Set-Cookie",
+    `sb_token=; HttpOnly;${secure} SameSite=Strict; Path=/; Max-Age=0`
+  );
 
-        const totalAnimales =
-            await pool.query(
-                `
-                SELECT COUNT(*) AS "totalAnimales"
-                FROM animales
-                `
-            );
-
-
-        const lecturasHoy =
-            await pool.query(
-                `
-                SELECT COUNT(*) AS "lecturasHoy"
-                FROM lecturas
-                WHERE timestamp::date = CURRENT_DATE
-                `
-            );
-
-
-        const alertasNoLeidas =
-            await pool.query(
-                `
-                SELECT COUNT(*) AS "alertasNoLeidas"
-                FROM alertas
-                WHERE leida = FALSE
-                `
-            );
-
-
-        const alertasRojas =
-            await pool.query(
-                `
-                SELECT COUNT(*) AS "alertasRojas"
-                FROM alertas
-                WHERE tipo = 'ROJA'
-                  AND leida = FALSE
-                `
-            );
-
-
-        const ultimas =
-            await pool.query(
-                `
-                SELECT
-                    l.*,
-                    a.nombre
-                FROM lecturas l
-                LEFT JOIN animales a
-                    ON l.rfid = a.rfid
-                ORDER BY l.timestamp DESC
-                LIMIT 20
-                `
-            );
-
-
-        const promediosDia =
-            await pool.query(
-                `
-                SELECT
-                    rfid,
-                    AVG(sal) AS avg_sal,
-                    AVG(temp_corp) AS avg_tc,
-                    AVG(temp_amb) AS avg_ta,
-                    MAX(timestamp) AS ultima
-                FROM lecturas
-                WHERE timestamp::date = CURRENT_DATE
-                GROUP BY rfid
-                `
-            );
-
-
-        res.json({
-
-            totalAnimales:
-                Number(
-                    totalAnimales.rows[0].totalAnimales
-                ),
-
-            lecturasHoy:
-                Number(
-                    lecturasHoy.rows[0].lecturasHoy
-                ),
-
-            alertasNoLeidas:
-                Number(
-                    alertasNoLeidas.rows[0].alertasNoLeidas
-                ),
-
-            alertasRojas:
-                Number(
-                    alertasRojas.rows[0].alertasRojas
-                ),
-
-            ultimas:
-                ultimas.rows,
-
-            promediosDia:
-                promediosDia.rows
-
-        });
-
-
-    } catch (error) {
-
-        console.error(
-            "❌ Error /api/dashboard:",
-            error.message
-        );
-
-        res.status(500).json({
-
-            ok: false,
-
-            error: error.message
-
-        });
-
-    }
-
+  res.json({
+    ok: true
+  });
 });
 
 
-/* ============================================================
-   API — ALERTAS
-   ============================================================ */
+/* =========================================================
+   USUARIO ACTUAL
+========================================================= */
 
-app.get("/api/alertas", async (req, res) => {
+app.get("/api/me", auth, async (req, res) => {
+  const r = await pool.query(`
+    SELECT
+      u.id,
+      u.usuario,
+      u.rol,
+      u.cliente_id,
+      c.nombre AS cliente
+    FROM usuarios u
+    JOIN clientes c
+      ON c.id=u.cliente_id
+    WHERE u.id=$1
+      AND u.cliente_id=$2
+      AND u.activo=TRUE
+      AND c.activo=TRUE
+  `, [
+    req.user.sub,
+    req.user.cliente_id
+  ]);
 
-    try {
+  if (!r.rows.length) {
+    return res.status(401).json({
+      ok: false,
+      error: "Usuario no disponible"
+    });
+  }
 
-        const result =
-            await pool.query(
-                `
-                SELECT
-                    al.*,
-                    an.nombre
-                FROM alertas al
-                LEFT JOIN animales an
-                    ON al.rfid = an.rfid
-                ORDER BY al.timestamp DESC
-                LIMIT 100
-                `
-            );
-
-
-        res.json(result.rows);
-
-
-    } catch (error) {
-
-        console.error(
-            "❌ Error /api/alertas:",
-            error.message
-        );
-
-        res.status(500).json({
-
-            ok: false,
-
-            error: error.message
-
-        });
-
-    }
-
+  res.json({
+    ok: true,
+    user: r.rows[0]
+  });
 });
 
 
-/* ============================================================
-   MARCAR ALERTA COMO LEÍDA
-   ============================================================ */
+/* =========================================================
+   DATOS DEL ESP32
+========================================================= */
 
-app.put("/api/alertas/:id/leer", async (req, res) => {
+app.post("/api/datos", async (req, res) => {
+  const apiKey =
+    req.headers["x-api-key"];
 
-    try {
+  const {
+    rfid,
+    sal,
+    temp_corp,
+    temp_amb
+  } = req.body;
 
-        await pool.query(
-            `
-            UPDATE alertas
-            SET leida = TRUE
-            WHERE id = $1
-            `,
-            [req.params.id]
-        );
+  if (!apiKey) {
+    return res.status(401).json({
+      ok: false,
+      error: "API key requerida"
+    });
+  }
 
+  if (
+    !rfid ||
+    sal === undefined ||
+    temp_corp === undefined ||
+    temp_amb === undefined
+  ) {
+    return res.status(400).json({
+      ok: false,
+      error: "Faltan campos"
+    });
+  }
 
-        res.json({
-            ok: true
-        });
+  try {
+    const c = await pool.query(
+      `SELECT id
+       FROM clientes
+       WHERE api_key=$1
+         AND activo=TRUE`,
+      [apiKey]
+    );
 
-
-    } catch (error) {
-
-        res.status(500).json({
-
-            ok: false,
-
-            error: error.message
-
-        });
-
+    if (!c.rows.length) {
+      return res.status(401).json({
+        ok: false,
+        error: "API key inválida"
+      });
     }
 
+    const clienteId = c.rows[0].id;
+
+    const r =
+      rfid.trim().toUpperCase();
+
+    await pool.query(`
+      INSERT INTO animales
+        (cliente_id,rfid)
+      VALUES ($1,$2)
+      ON CONFLICT
+        (cliente_id,rfid)
+      DO NOTHING
+    `, [
+      clienteId,
+      r
+    ]);
+
+    const alerta =
+      await clasificarAlerta(
+        clienteId,
+        r,
+        Number(sal),
+        Number(temp_corp)
+      );
+
+    await pool.query(`
+      INSERT INTO lecturas
+        (
+          cliente_id,
+          rfid,
+          sal,
+          temp_corp,
+          temp_amb,
+          alerta
+        )
+      VALUES
+        ($1,$2,$3,$4,$5,$6)
+    `, [
+      clienteId,
+      r,
+      Number(sal),
+      Number(temp_corp),
+      Number(temp_amb),
+      alerta.tipo
+    ]);
+
+    if (alerta.tipo !== "NORMAL") {
+      await pool.query(`
+        INSERT INTO alertas
+          (cliente_id,rfid,tipo,mensaje)
+        VALUES
+          ($1,$2,$3,$4)
+      `, [
+        clienteId,
+        r,
+        alerta.tipo,
+        alerta.mensaje
+      ]);
+    }
+
+    res.json({
+      ok: true,
+      alerta: alerta.tipo
+    });
+
+  } catch (e) {
+    console.error(
+      "❌ Error /api/datos:",
+      e.message
+    );
+
+    res.status(500).json({
+      ok: false,
+      error: "Error interno del servidor"
+    });
+  }
 });
 
 
-/* ============================================================
-   MARCAR TODAS LAS ALERTAS COMO LEÍDAS
-   ============================================================ */
+/* =========================================================
+   DASHBOARD
+========================================================= */
 
-app.put("/api/alertas/leer-todas", async (req, res) => {
+app.get("/api/dashboard", auth, async (req, res) => {
+  const c =
+    req.user.cliente_id;
 
-    try {
+  try {
+    const [
+      a,
+      l,
+      n,
+      r,
+      u,
+      p
+    ] = await Promise.all([
 
-        await pool.query(
-            `
-            UPDATE alertas
-            SET leida = TRUE
-            `
-        );
+      pool.query(
+        `SELECT COUNT(*) AS total
+         FROM animales
+         WHERE cliente_id=$1`,
+        [c]
+      ),
 
+      pool.query(
+        `SELECT COUNT(*) AS total
+         FROM lecturas
+         WHERE cliente_id=$1
+           AND timestamp::date=CURRENT_DATE`,
+        [c]
+      ),
 
-        res.json({
-            ok: true
-        });
+      pool.query(
+        `SELECT COUNT(*) AS total
+         FROM alertas
+         WHERE cliente_id=$1
+           AND leida=FALSE`,
+        [c]
+      ),
 
+      pool.query(
+        `SELECT COUNT(*) AS total
+         FROM alertas
+         WHERE cliente_id=$1
+           AND tipo='ROJA'
+           AND leida=FALSE`,
+        [c]
+      ),
 
-    } catch (error) {
+      pool.query(`
+        SELECT
+          l.*,
+          a.nombre
+        FROM lecturas l
+        LEFT JOIN animales a
+          ON a.cliente_id=l.cliente_id
+         AND a.rfid=l.rfid
+        WHERE l.cliente_id=$1
+        ORDER BY l.timestamp DESC
+        LIMIT 20
+      `, [c]),
 
-        res.status(500).json({
+      pool.query(`
+        SELECT
+          rfid,
+          AVG(sal) avg_sal,
+          AVG(temp_corp) avg_tc,
+          AVG(temp_amb) avg_ta,
+          MAX(timestamp) ultima
+        FROM lecturas
+        WHERE cliente_id=$1
+          AND timestamp::date=CURRENT_DATE
+        GROUP BY rfid
+      `, [c])
+    ]);
 
-            ok: false,
+    res.json({
+      totalAnimales:
+        Number(a.rows[0].total),
 
-            error: error.message
+      lecturasHoy:
+        Number(l.rows[0].total),
 
-        });
+      alertasNoLeidas:
+        Number(n.rows[0].total),
 
-    }
+      alertasRojas:
+        Number(r.rows[0].total),
 
+      ultimas:
+        u.rows,
+
+      promediosDia:
+        p.rows
+    });
+
+  } catch (e) {
+    console.error(
+      "❌ Error /api/dashboard:",
+      e.message
+    );
+
+    res.status(500).json({
+      ok: false,
+      error: "Error interno del servidor"
+    });
+  }
 });
 
 
-/* ============================================================
-   API — ANIMALES
-   ============================================================ */
+/* =========================================================
+   ALERTAS
+========================================================= */
 
-app.get("/api/animales", async (req, res) => {
+app.get("/api/alertas", auth, async (req, res) => {
+  try {
+    const r = await pool.query(`
+      SELECT
+        al.*,
+        an.nombre
+      FROM alertas al
+      LEFT JOIN animales an
+        ON an.cliente_id=al.cliente_id
+       AND an.rfid=al.rfid
+      WHERE al.cliente_id=$1
+      ORDER BY al.timestamp DESC
+      LIMIT 100
+    `, [
+      req.user.cliente_id
+    ]);
 
-    try {
+    res.json(r.rows);
 
-        const result =
-            await pool.query(
-                `
-                SELECT
-                    a.rfid,
-                    a.nombre,
-                    a.raza,
-                    a.categoria,
-                    a.descripcion,
-                    COUNT(l.id) AS total_lecturas,
-                    MAX(l.timestamp) AS ultima_lectura,
-                    AVG(l.temp_corp) AS avg_tc
-                FROM animales a
-                LEFT JOIN lecturas l
-                    ON a.rfid = l.rfid
-                GROUP BY
-                    a.rfid,
-                    a.nombre,
-                    a.raza,
-                    a.categoria,
-                    a.descripcion
-                ORDER BY
-                    ultima_lectura DESC NULLS LAST
-                `
-            );
-
-
-        res.json(result.rows);
-
-
-    } catch (error) {
-
-        console.error(
-            "❌ Error /api/animales:",
-            error.message
-        );
-
-        res.status(500).json({
-
-            ok: false,
-
-            error: error.message
-
-        });
-
-    }
-
+  } catch (e) {
+    res.status(500).json({
+      ok: false,
+      error: "Error interno del servidor"
+    });
+  }
 });
 
-
-/* ============================================================
-   CREAR ANIMAL
-   ============================================================ */
-
-app.post("/api/animales", async (req, res) => {
-
-    const {
-        rfid,
-        nombre,
-        raza,
-        categoria,
-        descripcion
-    } = req.body;
-
-
-    if (!rfid || !rfid.trim()) {
-
-        return res.status(400).json({
-
-            ok: false,
-
-            error: "El RFID es obligatorio"
-
-        });
-
-    }
-
-
-    const rfidLimpio =
-        rfid.trim().toUpperCase();
-
-
+app.put(
+  "/api/alertas/:id/leer",
+  auth,
+  async (req, res) => {
     try {
+      await pool.query(
+        `UPDATE alertas
+         SET leida=TRUE
+         WHERE id=$1
+           AND cliente_id=$2`,
+        [
+          req.params.id,
+          req.user.cliente_id
+        ]
+      );
 
-        const existe =
-            await pool.query(
-                `
-                SELECT rfid
-                FROM animales
-                WHERE rfid = $1
-                `,
-                [rfidLimpio]
-            );
+      res.json({
+        ok: true
+      });
 
-
-        if (existe.rows.length > 0) {
-
-            return res.status(409).json({
-
-                ok: false,
-
-                error:
-                    "Ya existe un animal con ese RFID"
-
-            });
-
-        }
-
-
-        await pool.query(
-            `
-            INSERT INTO animales
-            (rfid, nombre, raza, categoria, descripcion)
-            VALUES ($1, $2, $3, $4, $5)
-            `,
-            [
-                rfidLimpio,
-                nombre?.trim() || "",
-                raza?.trim() || "",
-                categoria || null,
-                descripcion?.trim() || ""
-            ]
-        );
-
-
-        console.log(
-            `➕ Animal registrado: ` +
-            `RFID=${rfidLimpio} ` +
-            `Nombre=${nombre || "-"} ` +
-            `Categoría=${categoria || "-"}`
-        );
-
-
-        res.json({
-
-            ok: true,
-
-            rfid: rfidLimpio
-
-        });
-
-
-    } catch (error) {
-
-        console.error(
-            "❌ Error creando animal:",
-            error.message
-        );
-
-        res.status(500).json({
-
-            ok: false,
-
-            error: error.message
-
-        });
-
+    } catch (e) {
+      res.status(500).json({
+        ok: false,
+        error: "Error interno del servidor"
+      });
     }
+  }
+);
 
-});
-
-
-/* ============================================================
-   EDITAR ANIMAL
-   ============================================================ */
-
-app.put("/api/animales/:rfid", async (req, res) => {
-
-    const {
-        nombre,
-        raza,
-        categoria,
-        descripcion
-    } = req.body;
-
-
+app.put(
+  "/api/alertas/leer-todas",
+  auth,
+  async (req, res) => {
     try {
+      await pool.query(
+        `UPDATE alertas
+         SET leida=TRUE
+         WHERE cliente_id=$1`,
+        [
+          req.user.cliente_id
+        ]
+      );
 
-        await pool.query(
-            `
-            UPDATE animales
-            SET
-                nombre = $1,
-                raza = $2,
-                categoria = $3,
-                descripcion = $4
-            WHERE rfid = $5
-            `,
-            [
-                nombre?.trim() || "",
-                raza?.trim() || "",
-                categoria || null,
-                descripcion?.trim() || "",
-                req.params.rfid
-            ]
-        );
+      res.json({
+        ok: true
+      });
 
-
-        res.json({
-            ok: true
-        });
-
-
-    } catch (error) {
-
-        console.error(
-            "❌ Error editando animal:",
-            error.message
-        );
-
-        res.status(500).json({
-
-            ok: false,
-
-            error: error.message
-
-        });
-
+    } catch (e) {
+      res.status(500).json({
+        ok: false,
+        error: "Error interno del servidor"
+      });
     }
-
-});
-
-
-/* ============================================================
-   HISTORIAL DE ANIMAL
-   ============================================================ */
-
-app.get(
-    "/api/animales/:rfid/historial",
-    async (req, res) => {
-
-        const { rfid } = req.params;
-
-        const dias =
-            Math.max(
-                1,
-                parseInt(req.query.dias) || 7
-            );
-
-
-        try {
-
-            const historial =
-                await pool.query(
-                    `
-                    SELECT *
-                    FROM lecturas
-                    WHERE rfid = $1
-                      AND timestamp >=
-                          NOW() - ($2 * INTERVAL '1 day')
-                    ORDER BY timestamp ASC
-                    `,
-                    [
-                        rfid,
-                        dias
-                    ]
-                );
-
-
-            const animal =
-                await pool.query(
-                    `
-                    SELECT *
-                    FROM animales
-                    WHERE rfid = $1
-                    `,
-                    [rfid]
-                );
-
-
-            res.json({
-
-                animal:
-                    animal.rows[0] || null,
-
-                historial:
-                    historial.rows
-
-            });
-
-
-        } catch (error) {
-
-            console.error(
-                "❌ Error historial:",
-                error.message
-            );
-
-            res.status(500).json({
-
-                ok: false,
-
-                error: error.message
-
-            });
-
-        }
-
-    }
+  }
 );
 
 
-/* ============================================================
-   API — VACUNAS
-   ============================================================ */
+/* =========================================================
+   ANIMALES
+========================================================= */
 
-app.get("/api/vacunas", async (req, res) => {
-    try {
-        const { rfid } = req.query;
-        let query = `
-            SELECT v.*, a.nombre
-            FROM vacunas v
-            LEFT JOIN animales a ON v.rfid = a.rfid
-        `;
-        const params = [];
-        if (rfid) {
-            params.push(rfid);
-            query += ` WHERE v.rfid = $1`;
-        }
-        query += ` ORDER BY v.fecha_aplicacion DESC`;
+app.get("/api/animales", auth, async (req, res) => {
+  try {
+    const r = await pool.query(`
+      SELECT
+        a.rfid,
+        a.nombre,
+        a.raza,
+        a.categoria,
+        a.descripcion,
+        COUNT(l.id) total_lecturas,
+        MAX(l.timestamp) ultima_lectura,
+        AVG(l.temp_corp) avg_tc
+      FROM animales a
+      LEFT JOIN lecturas l
+        ON l.cliente_id=a.cliente_id
+       AND l.rfid=a.rfid
+      WHERE a.cliente_id=$1
+      GROUP BY
+        a.rfid,
+        a.nombre,
+        a.raza,
+        a.categoria,
+        a.descripcion
+      ORDER BY
+        ultima_lectura DESC NULLS LAST
+    `, [
+      req.user.cliente_id
+    ]);
 
-        const result = await pool.query(query, params);
-        res.json(result.rows);
+    res.json(r.rows);
 
-    } catch (error) {
-        console.error("❌ Error /api/vacunas:", error.message);
-        res.status(500).json({ ok: false, error: error.message });
-    }
+  } catch (e) {
+    res.status(500).json({
+      ok: false,
+      error: "Error interno del servidor"
+    });
+  }
 });
 
-app.post("/api/vacunas", async (req, res) => {
+app.post(
+  "/api/animales",
+  auth,
+  role("admin", "empleado"),
+  async (req, res) => {
+
     const {
-        rfid, categoria, nombre_vacuna, lote,
-        fecha_aplicacion, proxima_dosis, responsable, observaciones
+      rfid,
+      nombre,
+      raza,
+      categoria,
+      descripcion
     } = req.body;
 
-    if (!rfid || !categoria || !nombre_vacuna || !fecha_aplicacion) {
-        return res.status(400).json({ ok: false, error: "Faltan campos obligatorios" });
+    if (!rfid || !rfid.trim()) {
+      return res.status(400).json({
+        ok: false,
+        error: "El RFID es obligatorio"
+      });
     }
+
+    const r =
+      rfid.trim().toUpperCase();
 
     try {
-        await pool.query(
-            `INSERT INTO vacunas
-             (rfid, categoria, nombre_vacuna, lote, fecha_aplicacion, proxima_dosis, responsable, observaciones)
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
-            [rfid, categoria, nombre_vacuna, lote || null, fecha_aplicacion,
-             proxima_dosis || null, responsable || null, observaciones || null]
-        );
+      await pool.query(`
+        INSERT INTO animales
+          (
+            cliente_id,
+            rfid,
+            nombre,
+            raza,
+            categoria,
+            descripcion
+          )
+        VALUES
+          ($1,$2,$3,$4,$5,$6)
+      `, [
+        req.user.cliente_id,
+        r,
+        nombre?.trim() || "",
+        raza?.trim() || "",
+        categoria || null,
+        descripcion?.trim() || ""
+      ]);
 
-        console.log(`💉 Vacuna registrada: ${rfid} — ${nombre_vacuna}`);
-        res.json({ ok: true });
+      res.json({
+        ok: true,
+        rfid: r
+      });
 
-    } catch (error) {
-        console.error("❌ Error creando vacuna:", error.message);
-        res.status(500).json({ ok: false, error: error.message });
+    } catch (e) {
+
+      if (e.code === "23505") {
+        return res.status(409).json({
+          ok: false,
+          error:
+            "Ya existe un animal con ese RFID en este cliente"
+        });
+      }
+
+      res.status(500).json({
+        ok: false,
+        error: "Error interno del servidor"
+      });
     }
-});
+  }
+);
 
-app.put("/api/vacunas/:id", async (req, res) => {
+app.put(
+  "/api/animales/:rfid",
+  auth,
+  role("admin", "empleado"),
+  async (req, res) => {
+
     const {
-        categoria, nombre_vacuna, lote,
-        fecha_aplicacion, proxima_dosis, responsable, observaciones
+      nombre,
+      raza,
+      categoria,
+      descripcion
     } = req.body;
 
     try {
-        await pool.query(
-            `UPDATE vacunas SET
-                categoria=$1, nombre_vacuna=$2, lote=$3, fecha_aplicacion=$4,
-                proxima_dosis=$5, responsable=$6, observaciones=$7,
-                alerta_generada = CASE WHEN proxima_dosis IS DISTINCT FROM $5 THEN FALSE ELSE alerta_generada END
-             WHERE id=$8`,
-            [categoria, nombre_vacuna, lote || null, fecha_aplicacion,
-             proxima_dosis || null, responsable || null, observaciones || null, req.params.id]
-        );
-        res.json({ ok: true });
+      await pool.query(`
+        UPDATE animales
+        SET
+          nombre=$1,
+          raza=$2,
+          categoria=$3,
+          descripcion=$4
+        WHERE cliente_id=$5
+          AND rfid=$6
+      `, [
+        nombre?.trim() || "",
+        raza?.trim() || "",
+        categoria || null,
+        descripcion?.trim() || "",
+        req.user.cliente_id,
+        req.params.rfid
+      ]);
 
-    } catch (error) {
-        console.error("❌ Error editando vacuna:", error.message);
-        res.status(500).json({ ok: false, error: error.message });
+      res.json({
+        ok: true
+      });
+
+    } catch (e) {
+      res.status(500).json({
+        ok: false,
+        error: "Error interno del servidor"
+      });
     }
-});
+  }
+);
 
-app.delete("/api/vacunas/:id", async (req, res) => {
+
+/* =========================================================
+   HISTORIAL
+========================================================= */
+
+app.get(
+  "/api/animales/:rfid/historial",
+  auth,
+  async (req, res) => {
+
+    const dias =
+      Math.max(
+        1,
+        parseInt(req.query.dias) || 7
+      );
+
     try {
-        await pool.query(`DELETE FROM vacunas WHERE id=$1`, [req.params.id]);
-        res.json({ ok: true });
-    } catch (error) {
-        res.status(500).json({ ok: false, error: error.message });
+      const [h, a] =
+        await Promise.all([
+
+          pool.query(
+            `SELECT *
+             FROM lecturas
+             WHERE cliente_id=$1
+               AND rfid=$2
+               AND timestamp >=
+                   NOW()-($3*INTERVAL '1 day')
+             ORDER BY timestamp ASC`,
+            [
+              req.user.cliente_id,
+              req.params.rfid,
+              dias
+            ]
+          ),
+
+          pool.query(
+            `SELECT *
+             FROM animales
+             WHERE cliente_id=$1
+               AND rfid=$2`,
+            [
+              req.user.cliente_id,
+              req.params.rfid
+            ]
+          )
+        ]);
+
+      res.json({
+        animal: a.rows[0] || null,
+        historial: h.rows
+      });
+
+    } catch (e) {
+      res.status(500).json({
+        ok: false,
+        error: "Error interno del servidor"
+      });
     }
-});
+  }
+);
 
 
-/* ============================================================
-   REPORTE CSV
-   ============================================================ */
+/* =========================================================
+   VACUNAS
+========================================================= */
 
-app.get("/api/reporte", async (req, res) => {
-
+app.get("/api/vacunas", auth, async (req, res) => {
+  try {
     const {
-        desde,
-        hasta,
-        rfid
+      rfid
     } = req.query;
 
-
-    let query = `
-        SELECT
-            l.*,
-            a.nombre
-        FROM lecturas l
-        LEFT JOIN animales a
-            ON l.rfid = a.rfid
-        WHERE 1 = 1
+    let q = `
+      SELECT
+        v.*,
+        a.nombre
+      FROM vacunas v
+      LEFT JOIN animales a
+        ON a.cliente_id=v.cliente_id
+       AND a.rfid=v.rfid
+      WHERE v.cliente_id=$1
     `;
 
-
-    const params = [];
-
-
-    if (desde) {
-
-        params.push(desde);
-
-        query +=
-            ` AND l.timestamp::date >= $${params.length}`;
-
-    }
-
-
-    if (hasta) {
-
-        params.push(hasta);
-
-        query +=
-            ` AND l.timestamp::date <= $${params.length}`;
-
-    }
-
+    const p = [
+      req.user.cliente_id
+    ];
 
     if (rfid) {
+      p.push(rfid);
 
-        params.push(rfid);
-
-        query +=
-            ` AND l.rfid = $${params.length}`;
-
+      q +=
+        ` AND v.rfid=$${p.length}`;
     }
 
+    q +=
+      ` ORDER BY v.fecha_aplicacion DESC`;
 
-    query +=
-        " ORDER BY l.timestamp DESC";
+    const r =
+      await pool.query(q, p);
 
+    res.json(r.rows);
+
+  } catch (e) {
+    res.status(500).json({
+      ok: false,
+      error: "Error interno del servidor"
+    });
+  }
+});
+
+app.post(
+  "/api/vacunas",
+  auth,
+  role(
+    "admin",
+    "empleado",
+    "veterinario"
+  ),
+  async (req, res) => {
+
+    const {
+      rfid,
+      categoria,
+      nombre_vacuna,
+      lote,
+      fecha_aplicacion,
+      proxima_dosis,
+      responsable,
+      observaciones
+    } = req.body;
+
+    if (
+      !rfid ||
+      !categoria ||
+      !nombre_vacuna ||
+      !fecha_aplicacion
+    ) {
+      return res.status(400).json({
+        ok: false,
+        error: "Faltan campos obligatorios"
+      });
+    }
+
+    try {
+      await pool.query(`
+        INSERT INTO vacunas
+          (
+            cliente_id,
+            rfid,
+            categoria,
+            nombre_vacuna,
+            lote,
+            fecha_aplicacion,
+            proxima_dosis,
+            responsable,
+            observaciones
+          )
+        VALUES
+          ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+      `, [
+        req.user.cliente_id,
+        rfid,
+        categoria,
+        nombre_vacuna,
+        lote || null,
+        fecha_aplicacion,
+        proxima_dosis || null,
+        responsable || null,
+        observaciones || null
+      ]);
+
+      res.json({
+        ok: true
+      });
+
+    } catch (e) {
+      res.status(500).json({
+        ok: false,
+        error: "Error interno del servidor"
+      });
+    }
+  }
+);
+
+app.put(
+  "/api/vacunas/:id",
+  auth,
+  role(
+    "admin",
+    "empleado",
+    "veterinario"
+  ),
+  async (req, res) => {
+
+    const {
+      categoria,
+      nombre_vacuna,
+      lote,
+      fecha_aplicacion,
+      proxima_dosis,
+      responsable,
+      observaciones
+    } = req.body;
+
+    try {
+      await pool.query(`
+        UPDATE vacunas
+        SET
+          categoria=$1,
+          nombre_vacuna=$2,
+          lote=$3,
+          fecha_aplicacion=$4,
+          proxima_dosis=$5,
+          responsable=$6,
+          observaciones=$7,
+          alerta_generada=
+            CASE
+              WHEN proxima_dosis IS DISTINCT FROM $5
+              THEN FALSE
+              ELSE alerta_generada
+            END
+        WHERE id=$8
+          AND cliente_id=$9
+      `, [
+        categoria,
+        nombre_vacuna,
+        lote || null,
+        fecha_aplicacion,
+        proxima_dosis || null,
+        responsable || null,
+        observaciones || null,
+        req.params.id,
+        req.user.cliente_id
+      ]);
+
+      res.json({
+        ok: true
+      });
+
+    } catch (e) {
+      res.status(500).json({
+        ok: false,
+        error: "Error interno del servidor"
+      });
+    }
+  }
+);
+
+app.delete(
+  "/api/vacunas/:id",
+  auth,
+  role("admin"),
+  async (req, res) => {
+
+    try {
+      await pool.query(
+        `DELETE FROM vacunas
+         WHERE id=$1
+           AND cliente_id=$2`,
+        [
+          req.params.id,
+          req.user.cliente_id
+        ]
+      );
+
+      res.json({
+        ok: true
+      });
+
+    } catch (e) {
+      res.status(500).json({
+        ok: false,
+        error: "Error interno del servidor"
+      });
+    }
+  }
+);
+
+
+/* =========================================================
+   REPORTE
+========================================================= */
+
+app.get("/api/reporte", auth, async (req, res) => {
+
+  const {
+    desde,
+    hasta,
+    rfid
+  } = req.query;
+
+  const p = [
+    req.user.cliente_id
+  ];
+
+  let q = `
+    SELECT
+      l.*,
+      a.nombre
+    FROM lecturas l
+    LEFT JOIN animales a
+      ON a.cliente_id=l.cliente_id
+     AND a.rfid=l.rfid
+    WHERE l.cliente_id=$1
+  `;
+
+  if (desde) {
+    p.push(desde);
+
+    q +=
+      ` AND l.timestamp::date >= $${p.length}`;
+  }
+
+  if (hasta) {
+    p.push(hasta);
+
+    q +=
+      ` AND l.timestamp::date <= $${p.length}`;
+  }
+
+  if (rfid) {
+    p.push(rfid);
+
+    q +=
+      ` AND l.rfid=$${p.length}`;
+  }
+
+  q +=
+    ` ORDER BY l.timestamp DESC`;
+
+  try {
+
+    const r =
+      await pool.query(q, p);
+
+    const filas =
+      r.rows.map(x =>
+        `${x.id},"${String(x.rfid || "")
+          .replace(/"/g, '""')}","${String(x.nombre || "")
+          .replace(/"/g, '""')}",${x.sal},${x.temp_corp},${x.temp_amb},${x.alerta},"${x.timestamp}"`
+      );
+
+    const csv = [
+      "ID,RFID,Nombre,Sal(g),Temp_Corp(°C),Temp_Amb(°C),Alerta,Timestamp",
+      ...filas
+    ].join("\n");
+
+    res.setHeader(
+      "Content-Type",
+      "text/csv; charset=utf-8"
+    );
+
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="sentinelb_reporte_${Date.now()}.csv"`
+    );
+
+    res.send("\uFEFF" + csv);
+
+  } catch (e) {
+
+    res.status(500).json({
+      ok: false,
+      error: "Error interno del servidor"
+    });
+  }
+});
+
+
+/* =========================================================
+   CLIENTES / MULTITENENCIA
+========================================================= */
+
+app.post(
+  "/api/clientes",
+  auth,
+  role("superadmin"),
+  async (req, res) => {
+
+    const {
+      nombre
+    } = req.body;
+
+    if (!nombre?.trim()) {
+      return res.status(400).json({
+        ok: false,
+        error: "Nombre requerido"
+      });
+    }
+
+    const apiKey =
+      crypto.randomBytes(32)
+        .toString("hex");
+
+    const r =
+      await pool.query(
+        `INSERT INTO clientes
+          (nombre,api_key)
+         VALUES
+          ($1,$2)
+         RETURNING id,nombre,api_key`,
+        [
+          nombre.trim(),
+          apiKey
+        ]
+      );
+
+    res.status(201).json({
+      ok: true,
+      cliente: r.rows[0]
+    });
+  }
+);
+
+
+/* =========================================================
+   USUARIOS
+========================================================= */
+
+app.post(
+  "/api/usuarios",
+  auth,
+  role("superadmin", "admin"),
+  async (req, res) => {
+
+    const {
+      usuario,
+      password,
+      rol,
+      cliente_id
+    } = req.body;
+
+    const clienteId =
+      req.user.rol === "superadmin"
+        ? cliente_id
+        : req.user.cliente_id;
+
+    if (
+      !usuario ||
+      !password ||
+      !rol ||
+      !clienteId
+    ) {
+      return res.status(400).json({
+        ok: false,
+        error: "Faltan campos"
+      });
+    }
+
+    if (
+      ![
+        "admin",
+        "empleado",
+        "veterinario"
+      ].includes(rol)
+    ) {
+      return res.status(400).json({
+        ok: false,
+        error: "Rol inválido"
+      });
+    }
+
+    const hash =
+      await bcrypt.hash(
+        password,
+        12
+      );
 
     try {
 
-        const result =
-            await pool.query(
-                query,
-                params
-            );
+      const r =
+        await pool.query(`
+          INSERT INTO usuarios
+            (
+              cliente_id,
+              usuario,
+              password_hash,
+              rol
+            )
+          VALUES
+            ($1,$2,$3,$4)
+          RETURNING
+            id,
+            cliente_id,
+            usuario,
+            rol
+        `, [
+          clienteId,
+          usuario.trim(),
+          hash,
+          rol
+        ]);
 
+      res.status(201).json({
+        ok: true,
+        usuario: r.rows[0]
+      });
 
-        const filas = result.rows.map(r => {
+    } catch (e) {
 
-            const nombre =
-                String(r.nombre || "")
-                    .replace(/"/g, '""');
-
-            const rfidSeguro =
-                String(r.rfid || "")
-                    .replace(/"/g, '""');
-
-            return (
-                `${r.id},` +
-                `"${rfidSeguro}",` +
-                `"${nombre}",` +
-                `${r.sal},` +
-                `${r.temp_corp},` +
-                `${r.temp_amb},` +
-                `${r.alerta},` +
-                `"${r.timestamp}"`
-            );
-
+      if (e.code === "23505") {
+        return res.status(409).json({
+          ok: false,
+          error:
+            "Ese usuario ya existe en el cliente"
         });
+      }
 
-
-        const csv = [
-
-            "ID,RFID,Nombre,Sal(g),Temp_Corp(°C),Temp_Amb(°C),Alerta,Timestamp",
-
-            ...filas
-
-        ].join("\n");
-
-
-        res.setHeader(
-            "Content-Type",
-            "text/csv; charset=utf-8"
-        );
-
-
-        res.setHeader(
-            "Content-Disposition",
-            `attachment; filename="sentinelb_reporte_${Date.now()}.csv"`
-        );
-
-
-        res.send("\uFEFF" + csv);
-
-
-    } catch (error) {
-
-        console.error(
-            "❌ Error /api/reporte:",
-            error.message
-        );
-
-        res.status(500).json({
-
-            ok: false,
-
-            error: error.message
-
-        });
-
+      res.status(500).json({
+        ok: false,
+        error: "Error interno del servidor"
+      });
     }
+  }
+);
 
-});
 
-
-/* ============================================================
-   RUTA PRINCIPAL
-   ============================================================ */
+/* =========================================================
+   ARCHIVO PRINCIPAL
+========================================================= */
 
 app.get("/", (req, res) => {
-
-    res.sendFile(
-        path.join(__dirname, "login.html")
-    );
-
+  res.sendFile(
+    path.join(__dirname, "login.html")
+  );
 });
-
-
-/* ============================================================
-   MANEJO DE RUTA NO ENCONTRADA
-   ============================================================ */
 
 app.use((req, res) => {
 
-    if (req.path.startsWith("/api/")) {
+  if (req.path.startsWith("/api/")) {
+    return res.status(404).json({
+      ok: false,
+      error: "Endpoint no encontrado"
+    });
+  }
 
-        return res.status(404).json({
-
-            ok: false,
-
-            error: "Endpoint no encontrado"
-
-        });
-
-    }
-
-    res.status(404).send("Página no encontrada");
-
+  res.status(404).send(
+    "Página no encontrada"
+  );
 });
 
 
-/* ============================================================
-   INICIAR SERVIDOR
-   ============================================================ */
+/* =========================================================
+   INICIALIZACIÓN DE BASE DE DATOS
+========================================================= */
 
-async function startServer() {
+async function initDB() {
 
-    await initDB();
+  const client =
+    await pool.connect();
 
-    await verificarVacunasProximas();
-    setInterval(verificarVacunasProximas, 6 * 60 * 60 * 1000); // cada 6 horas
+  try {
 
-    app.listen(
-        PORT,
-        "0.0.0.0",
-        () => {
+    await client.query("SELECT 1");
 
-            console.log("");
-            console.log("======================================");
-            console.log("🐄 SENTINELB — MONITOR BOVINO");
-            console.log("======================================");
+    const column =
+      await client.query(`
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_name='usuarios'
+          AND column_name='password'
+      `);
 
-            console.log(
-                `🌐 Servidor escuchando en puerto ${PORT}`
-            );
+    if (column.rows.length) {
 
-            console.log(
-                `📱 Aplicación: http://localhost:${PORT}`
-            );
+      const legacy =
+        await client.query(`
+          SELECT
+            id,
+            password
+          FROM usuarios
+          WHERE password_hash IS NULL
+            AND password IS NOT NULL
+        `);
 
-            console.log(
-                `❤️ Health Check: http://localhost:${PORT}/healthz`
-            );
+      for (const u of legacy.rows) {
 
-            console.log(
-                `📡 API ESP32: /api/datos`
-            );
+        const hash =
+          await bcrypt.hash(
+            String(u.password),
+            12
+          );
 
-            console.log("======================================");
-            console.log("");
+        await client.query(
+          `UPDATE usuarios
+           SET password_hash=$1
+           WHERE id=$2`,
+          [
+            hash,
+            u.id
+          ]
+        );
+      }
 
-        }
+      await client.query(
+        "ALTER TABLE usuarios DROP COLUMN password"
+      );
+
+      console.log(
+        `🔐 ${legacy.rows.length} contraseña(s) migrada(s) a bcrypt`
+      );
+    }
+
+    const superadmin =
+      await client.query(`
+        SELECT id
+        FROM usuarios
+        WHERE rol='superadmin'
+          AND activo=TRUE
+        LIMIT 1
+      `);
+
+    if (!superadmin.rows.length) {
+
+      await client.query(`
+        UPDATE usuarios
+        SET rol='superadmin'
+        WHERE id=(
+          SELECT id
+          FROM usuarios
+          ORDER BY id
+          LIMIT 1
+        )
+      `);
+    }
+
+    console.log(
+      "✅ PostgreSQL conectado"
     );
 
+  } finally {
+
+    client.release();
+  }
 }
 
 
-startServer();
+/* =========================================================
+   INICIAR SERVIDOR
+========================================================= */
+
+async function startServer() {
+
+  await initDB();
+
+  await verificarVacunasProximas();
+
+  setInterval(
+    verificarVacunasProximas,
+    6 * 60 * 60 * 1000
+  );
+
+  app.listen(
+    PORT,
+    "0.0.0.0",
+    () =>
+      console.log(
+        `🐄 SentinelB escuchando en ${PORT}`
+      )
+  );
+}
+
+startServer().catch(e => {
+
+  console.error(
+    "❌ Error iniciando SentinelB:",
+    e
+  );
+
+  process.exit(1);
+});
